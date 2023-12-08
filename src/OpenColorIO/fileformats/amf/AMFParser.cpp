@@ -145,13 +145,6 @@ public:
         return m_amfConfig;
     }
 
-    void writeConfig()
-    {
-        std::string ocioFilePath = m_xmlFilePath + std::string(".ocio");
-        std::ofstream ocioFile(ocioFilePath);
-        m_amfConfig->serialize(ocioFile);
-    }
-
 private:
     void parse(const std::string & buffer, bool lastLine);
 
@@ -1184,7 +1177,6 @@ ConstConfigRcPtr AMFParser::buildConfig(AMFInfo& amfInfoObject, const char* amfF
     }
     m_impl = new Impl(amfInfoObject, amfFilePath);
     m_impl->parse();
-    m_impl->writeConfig();
     return m_impl->getConfig();
 }
 
