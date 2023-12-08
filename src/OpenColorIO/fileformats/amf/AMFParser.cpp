@@ -83,9 +83,6 @@ private:
             delete t;
         }
 
-        std::vector<std::pair<std::string, std::string>> m_subElements;
-        std::vector<std::pair<std::string, std::string>> m_attributes;
-
         void addSubElement(const std::string& name, const std::string& value)
         {
             m_subElements.push_back(std::make_pair(name, value));
@@ -95,12 +92,30 @@ private:
         {
             m_attributes.push_back(std::make_pair(name, value));
         }
+
+        std::vector<std::pair<std::string, std::string>> m_subElements;
+        std::vector<std::pair<std::string, std::string>> m_attributes;
     };
 
     class AMFInputTransform : public AMFTransform
     {
     public:
         AMFInputTransform() : m_isInverse(false) {};
+
+        void addTld(const std::string& name)
+        {
+            m_tldTemp.push(name);
+        }
+
+        void removeTld()
+        {
+            m_tldTemp.pop();
+        }
+
+        void addTldElement(const std::string& name, const std::string& value)
+        {
+            m_tldElements.push_back(std::make_pair(name, value));
+        }
 
         bool m_isInverse;
         std::stack<std::string> m_tldTemp;
@@ -110,6 +125,21 @@ private:
     class AMFOutputTransform : public AMFTransform
     {
     public:
+        void addTld(const std::string& name)
+        {
+            m_tldTemp.push(name);
+        }
+
+        void removeTld()
+        {
+            m_tldTemp.pop();
+        }
+
+        void addTldElement(const std::string& name, const std::string& value)
+        {
+            m_tldElements.push_back(std::make_pair(name, value));
+        }
+
         std::stack<std::string> m_tldTemp;
         std::vector<std::pair<std::string, std::string>> m_tldElements;
     };
@@ -270,7 +300,7 @@ bool AMFParser::Impl::HandleInputTransformStartElement(AMFParser::Impl* pImpl, c
             const char* attrValue = atts[i + 1];
             pImpl->m_input.addAttribute(attrName, attrValue);
         }
-        pImpl->m_input.m_tldTemp.push(name);
+        pImpl->m_input.addTld(name);
         return true;
     }
     else if (pImpl->m_isInsideInputTransform)
@@ -279,7 +309,7 @@ bool AMFParser::Impl::HandleInputTransformStartElement(AMFParser::Impl* pImpl, c
         if (0 == strcmp(name, AMF_TAG_IODT) || 0 == strcmp(name, AMF_TAG_IRRT))
         {
             pImpl->m_input.m_isInverse = true;
-            pImpl->m_input.m_tldTemp.push(name);
+            pImpl->m_input.addTld(name);
         }
         return true;
     }
@@ -298,14 +328,14 @@ bool AMFParser::Impl::HandleOutputTransformStartElement(AMFParser::Impl* pImpl, 
             const char* attrValue = atts[i + 1];
             pImpl->m_output.addAttribute(attrName, attrValue);
         }
-        pImpl->m_output.m_tldTemp.push(name);
+        pImpl->m_output.addTld(name);
         return true;
     }
     else if (pImpl->m_isInsideOutputTransform)
     {
         pImpl->m_currentElement = name;
         if (0 == strcmp(name, AMF_TAG_ODT) || 0 == strcmp(name, AMF_TAG_RRT))
-            pImpl->m_output.m_tldTemp.push(name);
+            pImpl->m_output.addTld(name);
         return true;
     }
 
@@ -377,14 +407,14 @@ bool AMFParser::Impl::HandleInputTransformEndElement(AMFParser::Impl* pImpl, con
     if ((0 == strcmp(name, AMF_TAG_INPUT_TRANSFORM)))
     {
         pImpl->m_isInsideInputTransform = false;
-        pImpl->m_input.m_tldTemp.pop();
+        pImpl->m_input.removeTld();
         return true;
     }
     else if (pImpl->m_isInsideInputTransform)
     {
         pImpl->m_currentElement.clear();
         if (0 == strcmp(name, AMF_TAG_IODT) || 0 == strcmp(name, AMF_TAG_IRRT))
-            pImpl->m_input.m_tldTemp.pop();
+            pImpl->m_input.removeTld();
         return true;
     }
 
@@ -396,14 +426,14 @@ bool AMFParser::Impl::HandleOutputTransformEndElement(AMFParser::Impl* pImpl, co
     if ((0 == strcmp(name, AMF_TAG_OUTPUT_TRANSFORM)))
     {
         pImpl->m_isInsideOutputTransform = false;
-        pImpl->m_output.m_tldTemp.pop();
+        pImpl->m_output.removeTld();
         return true;
     }
     else if (pImpl->m_isInsideOutputTransform)
     {
         pImpl->m_currentElement.clear();
         if (0 == strcmp(name, AMF_TAG_ODT) || 0 == strcmp(name, AMF_TAG_RRT))
-            pImpl->m_output.m_tldTemp.pop();
+            pImpl->m_output.removeTld();
         return true;
     }
 
@@ -457,7 +487,7 @@ void AMFParser::Impl::CharacterDataHandler(void *userData, const XML_Char *s, in
     {
         std::string currentParentElement = pImpl->m_input.m_tldTemp.empty() ? "" : pImpl->m_input.m_tldTemp.top();
         if (0 == strcmp(currentParentElement.c_str(), AMF_TAG_INPUT_TRANSFORM))
-            pImpl->m_input.m_tldElements.push_back(std::make_pair(pImpl->m_currentElement, value));
+            pImpl->m_input.addTldElement(pImpl->m_currentElement, value);
         else if (0 == strcmp(currentParentElement.c_str(), AMF_TAG_IODT))
             pImpl->m_input.addSubElement(pImpl->m_currentElement, value);
     }
@@ -465,7 +495,7 @@ void AMFParser::Impl::CharacterDataHandler(void *userData, const XML_Char *s, in
     {
         std::string currentParentElement = pImpl->m_output.m_tldTemp.empty() ? "" : pImpl->m_output.m_tldTemp.top();
         if (0 == strcmp(currentParentElement.c_str(), AMF_TAG_OUTPUT_TRANSFORM))
-            pImpl->m_output.m_tldElements.push_back(std::make_pair(pImpl->m_currentElement, value));
+            pImpl->m_output.addTldElement(pImpl->m_currentElement, value);
         else if (0 == strcmp(currentParentElement.c_str(), AMF_TAG_ODT))
             pImpl->m_output.addSubElement(pImpl->m_currentElement, value);
     }
