@@ -4,10 +4,16 @@
 #include <sstream>
 #include <unordered_map>
 #include <stack>
-#include <string.h>
 
 #include "fileformats/amf/AMFParser.h"
 #include "expat.h"
+
+#ifdef _WIN32
+#define STRCASECMP _strcmpi
+#else
+#include <strings.h>
+#define STRCASECMP strcasecmp
+#endif
 
 namespace OCIO_NAMESPACE
 {
@@ -1244,7 +1250,7 @@ bool AMFParser::Impl::mustApply(AMFTransform& amft, bool isLook)
     {
         if (0 == std::strcmp(it->first.c_str(), "applied"))
         {
-            if (0 == _strcmpi(it->second.c_str(), "true"))
+            if (0 == STRCASECMP(it->second.c_str(), "true"))
             {
                 return false;
             }
