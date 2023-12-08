@@ -799,11 +799,12 @@ void AMFParser::Impl::processClipId()
         if (0 == strcmp(elem.first.c_str(), AMF_TAG_CLIPNAME))
         {
             m_clipName = elem.second.c_str();
-            return;
+            break;
         }
         if (0 == strcmp(elem.first.c_str(), AMF_TAG_UUID))
         {
             m_clipName = elem.second.c_str();
+            break;
         }
     }
 
@@ -816,7 +817,6 @@ void AMFParser::Impl::processClipId()
     if (m_clipName.empty())
         m_clipName = "AMF Clip Name";
 }
-
 
 void AMFParser::Impl::loadACESRefConfig()
 {
