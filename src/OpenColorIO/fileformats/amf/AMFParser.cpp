@@ -281,7 +281,7 @@ void AMFParser::Impl::parse(const std::string& buffer, bool lastLine)
 
 }
 
-void AMFParser::Impl::StartElementHandler(void *userData, const XML_Char *name, const XML_Char **atts)
+void AMFParser::Impl::StartElementHandler(void* userData, const XML_Char* name, const XML_Char* *atts)
 {
     AMFParser::Impl* pImpl = (AMFParser::Impl*)userData;
     if (IsValidElement(pImpl, name))
@@ -295,7 +295,7 @@ void AMFParser::Impl::StartElementHandler(void *userData, const XML_Char *name, 
     }
 }
 
-bool AMFParser::Impl::HandleInputTransformStartElement(AMFParser::Impl* pImpl, const XML_Char *name, const XML_Char** atts)
+bool AMFParser::Impl::HandleInputTransformStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts)
 {
     if ((0 == strcmp(name, AMF_TAG_INPUT_TRANSFORM)))
     {
@@ -323,7 +323,7 @@ bool AMFParser::Impl::HandleInputTransformStartElement(AMFParser::Impl* pImpl, c
     return false;
 }
 
-bool AMFParser::Impl::HandleOutputTransformStartElement(AMFParser::Impl* pImpl, const XML_Char *name, const XML_Char** atts)
+bool AMFParser::Impl::HandleOutputTransformStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts)
 {
     if ((0 == strcmp(name, AMF_TAG_OUTPUT_TRANSFORM)))
     {
@@ -348,7 +348,7 @@ bool AMFParser::Impl::HandleOutputTransformStartElement(AMFParser::Impl* pImpl, 
     return false;
 }
 
-bool AMFParser::Impl::HandleLookTransformStartElement(AMFParser::Impl* pImpl, const XML_Char *name, const XML_Char** atts)
+bool AMFParser::Impl::HandleLookTransformStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts)
 {
     if ((0 == strcmp(name, AMF_TAG_LOOK_TRANSFORM)))
     {
@@ -394,7 +394,7 @@ bool AMFParser::Impl::HandleClipIdStartElement(AMFParser::Impl* pImpl, const XML
     return false;
 }
 
-void AMFParser::Impl::EndElementHandler(void *userData, const XML_Char *name)
+void AMFParser::Impl::EndElementHandler(void* userData, const XML_Char* name)
 {
     AMFParser::Impl* pImpl = (AMFParser::Impl*)userData;
     if (IsValidElement(pImpl, name))
@@ -477,7 +477,7 @@ bool AMFParser::Impl::HandleClipIdEndElement(AMFParser::Impl* pImpl, const XML_C
 
     return false;
 }
-void AMFParser::Impl::CharacterDataHandler(void *userData, const XML_Char *s, int len)
+void AMFParser::Impl::CharacterDataHandler(void* userData, const XML_Char* s, int len)
 {
     AMFParser::Impl* pImpl = (AMFParser::Impl*)userData;
 
