@@ -31,6 +31,7 @@ static constexpr char AMF_TAG_TRANSFORMID[] = "aces:transformId";
 static constexpr char AMF_TAG_FILE[] = "aces:file";
 static constexpr char AMF_TAG_CDLCCR[] = "cdl:ColorCorrectionRef";
 
+static constexpr char AMF_TAG_IODT[] = "aces:inverseOutputDeviceTransform";
 static constexpr char AMF_TAG_ODT[] = "aces:outputDeviceTransform";
 static constexpr char AMF_TAG_RRT[] = "aces:referenceRenderingTransform";
 
@@ -38,10 +39,12 @@ static constexpr char AMF_TAG_CDLWS[] = "aces:cdlWorkingSpace";
 static constexpr char AMF_TAG_TOCDLWS[] = "aces:toCdlWorkingSpace";
 static constexpr char AMF_TAG_FROMCDLWS[] = "aces:fromCdlWorkingSpace";
 static constexpr char AMF_TAG_SOPNODE[] = "cdl:SOPNode";
+static constexpr char AMF_TAG_ASCSOP[] = "cdl:ASC_SOP";
 static constexpr char AMF_TAG_SLOPE[] = "cdl:Slope";
 static constexpr char AMF_TAG_OFFSET[] = "cdl:Offset";
 static constexpr char AMF_TAG_POWER[] = "cdl:Power";
 static constexpr char AMF_TAG_SATNODE[] = "cdl:SatNode";
+static constexpr char AMF_TAG_ASCSAT[] = "cdl:ASC_SAT";
 static constexpr char AMF_TAG_SAT[] = "cdl:Saturation";
 
 // Table of mappings from all log camera color spaces in the current Studio config
@@ -93,6 +96,16 @@ private:
         {
             m_attributes.push_back(std::make_pair(name, value));
         }
+    };
+
+    class AMFInputTransform : public AMFTransform
+    {
+    public:
+        AMFInputTransform() : m_isInverse(false) {};
+
+        bool m_isInverse;
+        std::stack<std::string> m_tldTemp;
+        std::vector<std::pair<std::string, std::string>> m_tldElements;
     };
 
     class AMFOutputTransform : public AMFTransform
@@ -192,7 +205,8 @@ private:
     ConfigRcPtr m_amfConfig;
 
     AMFInfo& m_amfInfoObject;
-    AMFTransform m_input, m_clipId;
+    AMFTransform m_clipId;
+    AMFInputTransform m_input;
     AMFOutputTransform m_output;
     std::vector<AMFTransformRcPtr> m_look;
     bool m_isInsideInputTransform, m_isInsideOutputTransform, m_isInsideLookTransform, m_isInsideClipId;
@@ -264,11 +278,17 @@ bool AMFParser::Impl::HandleInputTransformStartElement(AMFParser::Impl* pImpl, c
             const char* attrValue = atts[i + 1];
             pImpl->m_input.addAttribute(attrName, attrValue);
         }
+        pImpl->m_input.m_tldTemp.push(name);
         return true;
     }
     else if (pImpl->m_isInsideInputTransform)
     {
         pImpl->m_currentElement = name;
+        if (0 == strcmp(name, AMF_TAG_IODT))
+        {
+            pImpl->m_input.m_isInverse = true;
+            pImpl->m_input.m_tldTemp.push(name);
+        }
         return true;
     }
 
@@ -365,11 +385,14 @@ bool AMFParser::Impl::HandleInputTransformEndElement(AMFParser::Impl* pImpl, con
     if ((0 == strcmp(name, AMF_TAG_INPUT_TRANSFORM)))
     {
         pImpl->m_isInsideInputTransform = false;
+        pImpl->m_input.m_tldTemp.pop();
         return true;
     }
     else if (pImpl->m_isInsideInputTransform)
     {
         pImpl->m_currentElement.clear();
+        if (0 == strcmp(name, AMF_TAG_IODT))
+            pImpl->m_input.m_tldTemp.pop();
         return true;
     }
 
@@ -439,7 +462,13 @@ void AMFParser::Impl::CharacterDataHandler(void *userData, const XML_Char *s, in
 
     std::string value(s, len);
     if (pImpl->m_isInsideInputTransform && !pImpl->m_currentElement.empty())
-        pImpl->m_input.addSubElement(pImpl->m_currentElement, value);
+    {
+        std::string currentParentElement = pImpl->m_input.m_tldTemp.empty() ? "" : pImpl->m_input.m_tldTemp.top();
+        if (0 == strcmp(currentParentElement.c_str(), AMF_TAG_INPUT_TRANSFORM))
+            pImpl->m_input.m_tldElements.push_back(std::make_pair(pImpl->m_currentElement, value));
+        else if (0 == strcmp(currentParentElement.c_str(), AMF_TAG_IODT))
+            pImpl->m_input.addSubElement(pImpl->m_currentElement, value);
+    }
     else if (pImpl->m_isInsideOutputTransform && !pImpl->m_currentElement.empty())
     {
         std::string currentParentElement = pImpl->m_output.m_tldTemp.empty() ? "" : pImpl->m_output.m_tldTemp.top();
@@ -508,8 +537,6 @@ void AMFParser::Impl::processInputTransform()
             m_amfConfig->addColorSpace(cs);
         }
     }
-    //TODO: InputTransform is an inverse OutputTransform case.
-    //cs_name = load_output_transform(config, amf_config, base_path, input_elem, clip_name, is_inverse = True)
 }
 
 void AMFParser::Impl::processOutputTransform()
@@ -681,7 +708,12 @@ void AMFParser::Impl::processClipId()
     }
 
     if (m_clipName.empty())
-        //TODO: need to add code that will use AMF file name instead
+    {
+        std::string name = m_xmlFilePath.substr(m_xmlFilePath.find_last_of("/") + 1);
+        m_clipName = name.substr(0, name.find_last_of("."));
+    }
+
+    if (m_clipName.empty())
         m_clipName = "AMF Clip Name";
 }
 
@@ -732,7 +764,7 @@ void AMFParser::Impl::initAMFConfig()
 
     ColorSpaceTransformRcPtr cst = ColorSpaceTransform::Create();
     cst->setSrc(ACES);
-    cst->setDst(CONTEXT_NAME);
+    cst->setDst("$SHOT_LOOKS");
     cst->setDirection(TRANSFORM_DIR_FORWARD);
     cst->setDataBypass(true);
     LookRcPtr look = Look::Create();
@@ -760,7 +792,7 @@ void AMFParser::Impl::processOutputTransformId(const char* transformId, Transfor
         m_amfConfig->addViewTransform(vt);
 
         m_amfConfig->addSharedView(vt->getName(), vt->getName(), "<USE_DISPLAY_NAME>", ACES_LOOK_NAME, "", "");
-        m_amfConfig->addDisplaySharedView(vt->getName(), vt->getName());
+        m_amfConfig->addDisplaySharedView(dcs->getName(), vt->getName());
 
         if (tDirection == TRANSFORM_DIR_INVERSE)
         {
@@ -890,7 +922,53 @@ void AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
 
     for (auto it = look.m_subElements.begin(); it != look.m_subElements.end();)
     {
+        if (0 == strcmp(it->first.c_str(), AMF_TAG_ASCSOP))
+        {
+            hasCdl = true;
+            ++it;
+            while (it != look.m_subElements.end())
+            {
+                if (0 == strcmp(it->first.c_str(), AMF_TAG_SLOPE))
+                {
+                    slope = it->second.c_str();
+                }
+                else if (0 == strcmp(it->first.c_str(), AMF_TAG_OFFSET))
+                {
+                    offset = it->second.c_str();
+                }
+                else if (0 == strcmp(it->first.c_str(), AMF_TAG_POWER))
+                {
+                    power = it->second.c_str();
+                }
+                ++it;
+            }
+            continue;
+        }
+        ++it;
+    }
+
+    for (auto it = look.m_subElements.begin(); it != look.m_subElements.end();)
+    {
         if (0 == strcmp(it->first.c_str(), AMF_TAG_SATNODE))
+        {
+            hasCdl = true;
+            ++it;
+            while (it != look.m_subElements.end())
+            {
+                if (0 == strcmp(it->first.c_str(), AMF_TAG_SAT))
+                {
+                    sat = it->second.c_str();
+                }
+                ++it;
+            }
+            continue;
+        }
+        ++it;
+    }
+
+    for (auto it = look.m_subElements.begin(); it != look.m_subElements.end();)
+    {
+        if (0 == strcmp(it->first.c_str(), AMF_TAG_ASCSAT))
         {
             hasCdl = true;
             ++it;
@@ -1086,7 +1164,7 @@ void AMFParser::Impl::checkLutPath(const char* lutPath)
         return;
 
     std::string error = std::string("Invalid LUT Path: ") + std::string(lutPath);
-    throwMessage(error);
+    //TODO: skip this exception while we're debugging the parser: throwMessage(error);
 }
 
 void AMFParser::Impl::throwMessage(const std::string& error) const
