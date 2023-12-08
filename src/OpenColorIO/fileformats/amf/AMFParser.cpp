@@ -3,6 +3,7 @@
 
 #include <sstream>
 #include <unordered_map>
+#include <stack>
 
 #include <OpenColorIO/FileRules.h>
 
@@ -80,6 +81,13 @@ private:
         }
     };
 
+    class AMFOutputTransform : public AMFTransform
+    {
+    public:
+        std::stack<std::string> m_tldTemp;
+        std::vector<std::pair<std::string, std::string>> m_tldElements;
+    };
+
 public:
     Impl() = delete;
     Impl(const Impl &) = delete;
@@ -136,8 +144,8 @@ private:
 
     static bool IsValidElement(AMFParser::Impl* pImpl, const XML_Char* name);
 
-    void processInputTransforms();
-    void processOutputTransforms();
+    void processInputTransform();
+    void processOutputTransform();
     void processLookTransforms();
     void processClipId();
 
@@ -170,7 +178,8 @@ private:
     ConfigRcPtr m_amfConfig;
 
     AMFInfo& m_amfInfoObject;
-    AMFTransform m_input, m_output, m_clipId;
+    AMFTransform m_input, m_clipId;
+    AMFOutputTransform m_output;
     std::vector<AMFTransform*> m_look;
     bool m_isInsideInputTransform, m_isInsideOutputTransform, m_isInsideLookTransform, m_isInsideClipId;
     std::string m_currentElement, m_clipName;
@@ -198,8 +207,8 @@ void AMFParser::Impl::parse()
     }
 
     processClipId();
-    processInputTransforms();
-    //processOutputTransforms();
+    processInputTransform();
+    processOutputTransform();
     processLookTransforms();
 }
 
@@ -263,11 +272,14 @@ bool AMFParser::Impl::HandleOutputTransformStartElement(AMFParser::Impl* pImpl, 
             const char* attrValue = atts[i + 1];
             pImpl->m_output.addAttribute(attrName, attrValue);
         }
+        pImpl->m_output.m_tldTemp.push(name);
         return true;
     }
     else if (pImpl->m_isInsideOutputTransform)
     {
         pImpl->m_currentElement = name;
+        if (0 == strcmp(name, AMF_TAG_ODT) || 0 == strcmp(name, AMF_TAG_RRT))
+            pImpl->m_output.m_tldTemp.push(name);
         return true;
     }
 
@@ -355,11 +367,14 @@ bool AMFParser::Impl::HandleOutputTransformEndElement(AMFParser::Impl* pImpl, co
     if ((0 == strcmp(name, AMF_TAG_OUTPUT_TRANSFORM)))
     {
         pImpl->m_isInsideOutputTransform = false;
+        pImpl->m_output.m_tldTemp.pop();
         return true;
     }
     else if (pImpl->m_isInsideOutputTransform)
     {
         pImpl->m_currentElement.clear();
+        if (0 == strcmp(name, AMF_TAG_ODT) || 0 == strcmp(name, AMF_TAG_RRT))
+            pImpl->m_output.m_tldTemp.pop();
         return true;
     }
 
@@ -412,7 +427,13 @@ void AMFParser::Impl::CharacterDataHandler(void *userData, const XML_Char *s, in
     if (pImpl->m_isInsideInputTransform && !pImpl->m_currentElement.empty())
         pImpl->m_input.addSubElement(pImpl->m_currentElement, value);
     else if (pImpl->m_isInsideOutputTransform && !pImpl->m_currentElement.empty())
-        pImpl->m_output.addSubElement(pImpl->m_currentElement, value);
+    {
+        std::string currentParentElement = pImpl->m_output.m_tldTemp.empty() ? "" : pImpl->m_output.m_tldTemp.top();
+        if (0 == strcmp(currentParentElement.c_str(), AMF_TAG_OUTPUT_TRANSFORM))
+            pImpl->m_output.m_tldElements.push_back(std::make_pair(pImpl->m_currentElement, value));
+        else if (0 == strcmp(currentParentElement.c_str(), AMF_TAG_ODT))
+            pImpl->m_output.addSubElement(pImpl->m_currentElement, value);
+    }
     else if (pImpl->m_isInsideLookTransform && !pImpl->m_currentElement.empty())
         pImpl->m_look.back()->addSubElement(pImpl->m_currentElement, value);
     else if (pImpl->m_isInsideClipId && !pImpl->m_currentElement.empty())
@@ -434,7 +455,7 @@ bool AMFParser::Impl::IsValidElement(AMFParser::Impl* pImpl, const XML_Char* nam
     return true;
 }
 
-void AMFParser::Impl::processInputTransforms()
+void AMFParser::Impl::processInputTransform()
 {
     for (auto& elem : m_input.m_subElements)
     {
@@ -473,15 +494,13 @@ void AMFParser::Impl::processInputTransforms()
             m_amfConfig->addColorSpace(cs);
         }
     }
-    //To Do: InputTransform is an inverse OutputTransform case.
+    //TODO: InputTransform is an inverse OutputTransform case.
     //cs_name = load_output_transform(config, amf_config, base_path, input_elem, clip_name, is_inverse = True)
 }
 
-void AMFParser::Impl::processOutputTransforms()
+void AMFParser::Impl::processOutputTransform()
 {
-    /*
-    * To Do: need to find a way to locate top level elements
-    for (auto& elem : m_output.m_subElements)
+    for (auto& elem : m_output.m_tldElements)
     {
         if (0 == strcmp(elem.first.c_str(), AMF_TAG_TRANSFORMID))
         {
@@ -517,14 +536,13 @@ void AMFParser::Impl::processOutputTransforms()
             return;
         }
     }
-    */
 
-    for (auto it = m_output.m_subElements.begin(); it != m_output.m_subElements.end();)
+    auto it = m_output.m_subElements.begin();
+    while (it != m_output.m_subElements.end())
     {
         if (0 == strcmp(it->first.c_str(), AMF_TAG_ODT))
         {
-            ++it;
-            while (it != m_output.m_subElements.end() && strcmp(it->first.c_str(), AMF_TAG_ODT))
+            for (++it; it != m_output.m_subElements.end(); ++it)
             {
                 if (0 == strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
                 {
@@ -581,10 +599,8 @@ void AMFParser::Impl::processOutputTransforms()
                     m_amfConfig->setActiveViews(viewName.c_str());
                     m_amfConfig->addColorSpace(cs);
                 }
-                ++it;
             }
         }
-        ++it;
     }
 }
 
@@ -651,14 +667,14 @@ void AMFParser::Impl::processClipId()
     }
 
     if (m_clipName.empty())
-        //To Do: need to add code that will use AMF file name instead
+        //TODO: need to add code that will use AMF file name instead
         m_clipName = "AMF Clip Name";
 }
 
 
 void AMFParser::Impl::loadACESRefConfig()
 {
-    //To Do: need to find a way to remove the hard coding for 2.3 and 2.4 as this is not future proof
+    //TODO: need to find a way to remove the hard coding for 2.3 and 2.4 as this is not future proof
     std::string ver = GetVersion();
     if (ver.find("2.3") != std::string::npos || ver.find("2.4") != std::string::npos)
     {
@@ -693,7 +709,7 @@ void AMFParser::Impl::initAMFConfig()
     m_amfConfig->setRole("cie_xyz_d65_interchange", "CIE-XYZ-D65");
     m_amfConfig->setRole("color_timing", "ACEScct");
     m_amfConfig->setRole("compositing_log", "ACEScct");
-    //To Do: is NULL a valid value for default role?
+    //TODO: is NULL a valid value for default role?
     m_amfConfig->setRole("default", NULL);
 
     FileRulesRcPtr rules = FileRules::Create()->createEditableCopy();
@@ -709,7 +725,7 @@ void AMFParser::Impl::initAMFConfig()
     look->setName(ACES_LOOK_NAME);
     look->setProcessSpace(ACES);
     look->setTransform(cst);
-    //To Do: NULL is not allowed according to header but Py script is setting it to None so how do we achieve the same in C++?
+    //TODO: NULL is not allowed according to header but Py script is setting it to None so how do we achieve the same in C++?
     //look->setInverseTransform(NULL);
     look->setDescription("");
     m_amfConfig->addLook(look);
@@ -781,7 +797,7 @@ ConstViewTransformRcPtr AMFParser::Impl::searchViewTransforms(std::string acesId
 
 void AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
 {
-    auto wasApplied = mustApply(look, "Look");
+    auto wasApplied = !mustApply(look, "Look");
 
     std::string lookName = "AMF Look " + std::to_string(index);
     if (wasApplied)
@@ -992,8 +1008,7 @@ bool AMFParser::Impl::mustApply(AMFTransform& amft, bool isLook)
         {
             if (0 == _strcmpi(it->second.c_str(), "true"))
             {
-                if (isLook)
-                    return false;
+                return false;
             }
         }
     }
@@ -1030,7 +1045,7 @@ ConstColorSpaceRcPtr AMFParser::Impl::searchColorSpaces(std::string acesId)
     auto numColorSpaces = m_refConfig->getNumColorSpaces();
     for (auto index = 0; index < numColorSpaces; index++)
     {
-        ConstColorSpaceRcPtr cs = m_refConfig->getColorSpace(m_refConfig->getColorSpaceNameByIndex(index));
+        ConstColorSpaceRcPtr cs = m_refConfig->getColorSpace(m_refConfig->getColorSpaceNameByIndex(SEARCH_REFERENCE_SPACE_ALL, COLORSPACE_ALL, index));
         std::string desc = cs->getDescription();
         if (desc.find(acesId) != std::string::npos)
             return cs;
@@ -1088,7 +1103,7 @@ OCIOEXPORT ConstConfigRcPtr CreateFromAMF(AMFInfo& amfInfoObject, const char* am
 }
 
 /*
-* To Do
+* TODO
 * 
 * need to add following functions:
 * determine_clip_colorspace
