@@ -1278,7 +1278,7 @@ void AMFParser::Impl::determineClipColorSpace()
         m_amfInfoObject.clipColorSpaceName = m_amfConfig->getActiveDisplays();
         return;
     }
-    else if (!mustApplyInput)
+    else if (mustApplyInput)
     {
         m_amfInfoObject.clipColorSpaceName = m_amfInfoObject.inputColorSpaceName;
         return;
