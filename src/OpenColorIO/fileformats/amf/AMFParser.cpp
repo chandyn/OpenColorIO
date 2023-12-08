@@ -64,9 +64,23 @@ static const std::unordered_map<std::string, std::string> CAMERA_MAPPING =
 class AMFParser::Impl
 {
 private:
+    class AMFTransform;
+    typedef OCIO_SHARED_PTR<const AMFTransform> ConstAMFTransformRcPtr;
+    typedef OCIO_SHARED_PTR<AMFTransform> AMFTransformRcPtr;
+
     class AMFTransform
     {
     public:
+        static AMFTransformRcPtr Create()
+        {
+            return AMFTransformRcPtr(new AMFTransform(), &deleter);
+        }
+
+        static void deleter(AMFTransform* t)
+        {
+            delete t;
+        }
+
         std::vector<std::pair<std::string, std::string>> m_subElements;
         std::vector<std::pair<std::string, std::string>> m_attributes;
 
@@ -180,7 +194,7 @@ private:
     AMFInfo& m_amfInfoObject;
     AMFTransform m_input, m_clipId;
     AMFOutputTransform m_output;
-    std::vector<AMFTransform*> m_look;
+    std::vector<AMFTransformRcPtr> m_look;
     bool m_isInsideInputTransform, m_isInsideOutputTransform, m_isInsideLookTransform, m_isInsideClipId;
     std::string m_currentElement, m_clipName;
 };
@@ -291,7 +305,7 @@ bool AMFParser::Impl::HandleLookTransformStartElement(AMFParser::Impl* pImpl, co
     if ((0 == strcmp(name, AMF_TAG_LOOK_TRANSFORM)))
     {
         pImpl->m_isInsideLookTransform = true;
-        AMFTransform* amfTransform = new AMFTransform();
+        AMFTransformRcPtr amfTransform = AMFTransform::Create();
         pImpl->m_look.push_back(amfTransform);
         for (int i = 0; atts[i]; i += 2)
         {
