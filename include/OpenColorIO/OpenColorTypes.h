@@ -958,6 +958,8 @@ struct AMFInfo
     std::string displayName;    // Name of the OCIO display corresponding to the AMF Output Transform.
     std::string viewName;    // Name of the OCIO view corresponding to the AMF Output Transform.
 };
+typedef OCIO_SHARED_PTR<const AMFInfo> ConstAMFInfoRcPtr;
+typedef OCIO_SHARED_PTR<AMFInfo> AMFInfoRcPtr;
 
 } // namespace OCIO_NAMESPACE
 

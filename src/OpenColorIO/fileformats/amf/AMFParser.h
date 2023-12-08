@@ -15,16 +15,18 @@ public:
     explicit AMFParser() : m_impl(NULL) {};
     virtual ~AMFParser()
     {
+        if (m_impl == NULL)
+            return;
+
         delete m_impl;
         m_impl = NULL;
     }
 
-    ConstConfigRcPtr buildConfig(AMFInfo& amfInfoObject, const char* amfFilePath);
+    ConstConfigRcPtr buildConfig(AMFInfoRcPtr amfInfoObject, const char* amfFilePath);
 
 private:
-    // The hidden implementation's declaration
     class Impl;
-    Impl * m_impl; 
+    Impl* m_impl; 
 
     AMFParser(const AMFParser&) = delete;
     AMFParser& operator=(const AMFParser&) = delete;

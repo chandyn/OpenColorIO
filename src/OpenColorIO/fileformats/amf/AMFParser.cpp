@@ -74,6 +74,12 @@ private:
     class AMFTransform
     {
     public:
+        void reset()
+        {
+			m_subElements.clear();
+			m_attributes.clear();
+		}
+
         static AMFTransformRcPtr Create()
         {
             return AMFTransformRcPtr(new AMFTransform(), &deleter);
@@ -103,6 +109,14 @@ private:
     public:
         AMFInputTransform() : m_isInverse(false) {};
 
+        void reset()
+        {
+            AMFTransform::reset();
+			m_isInverse = false;
+			m_tldTemp = std::stack<std::string>();
+			m_tldElements.clear();
+        }
+
         void addTld(const std::string& name)
         {
             m_tldTemp.push(name);
@@ -126,6 +140,13 @@ private:
     class AMFOutputTransform : public AMFTransform
     {
     public:
+        void reset()
+        {
+			AMFTransform::reset();
+            m_tldTemp = std::stack<std::string>();
+            m_tldElements.clear();
+        }
+
         void addTld(const std::string& name)
         {
             m_tldTemp.push(name);
@@ -146,18 +167,15 @@ private:
     };
 
 public:
-    Impl() = delete;
     Impl(const Impl &) = delete;
     Impl & operator=(const Impl &) = delete;
 
-    explicit Impl(AMFInfo& amfInfoObject, const char* amfFilePath)
+    explicit Impl()
         : m_parser(XML_ParserCreate(NULL))
-        , m_xmlFilePath(amfFilePath)
-        , m_xmlStream(m_xmlFilePath)
         , m_lineNumber(0)
         , m_refConfig(NULL)
         , m_amfConfig(NULL)
-        , m_amfInfoObject(amfInfoObject)
+        , m_amfInfoObject(NULL)
         , m_isInsideInputTransform(false)
         , m_isInsideOutputTransform(false)
         , m_isInsideLookTransform(false)
@@ -165,10 +183,11 @@ public:
 
     ~Impl()
     {
+        reset();
         XML_ParserFree(m_parser);
     }
 
-    void parse();
+    void parse(AMFInfoRcPtr amfInfoObject, const char* amfFilePath);
 
     const ConstConfigRcPtr getConfig() const
     {
@@ -176,6 +195,8 @@ public:
     }
 
 private:
+    void reset();
+
     void parse(const std::string & buffer, bool lastLine);
 
     static void StartElementHandler(void* userData, const XML_Char* name, const XML_Char** atts);
@@ -228,7 +249,7 @@ private:
     ConstConfigRcPtr m_refConfig;
     ConfigRcPtr m_amfConfig;
 
-    AMFInfo& m_amfInfoObject;
+    AMFInfoRcPtr m_amfInfoObject;
     AMFTransform m_clipId;
     AMFInputTransform m_input;
     AMFOutputTransform m_output;
@@ -237,8 +258,31 @@ private:
     std::string m_currentElement, m_clipName;
 };
 
-void AMFParser::Impl::parse()
+void AMFParser::Impl::reset()
 {
+    m_xmlFilePath.clear();
+    if (m_xmlStream.is_open())
+        m_xmlStream.close();
+    m_lineNumber = 0;
+    m_refConfig = m_amfConfig = NULL;
+    m_clipId.reset();
+    m_input.reset();
+    m_output.reset();
+    for (auto& elem : m_look)
+        elem.reset();
+    m_isInsideInputTransform = m_isInsideOutputTransform = m_isInsideLookTransform = m_isInsideClipId = false;
+    m_currentElement.clear();
+    m_clipName.clear();
+}
+
+void AMFParser::Impl::parse(AMFInfoRcPtr amfInfoObject, const char* amfFilePath)
+{
+    reset();
+
+    m_xmlFilePath = amfFilePath;
+    m_xmlStream.open(m_xmlFilePath, std::ios_base::in);
+    m_amfInfoObject = amfInfoObject;
+
     loadACESRefConfig();
 
     initAMFConfig();
@@ -263,9 +307,9 @@ void AMFParser::Impl::parse()
     processOutputTransform();
     processLookTransforms();
 
-    m_amfInfoObject.clipIdentifier = m_clipName;
-    m_amfInfoObject.displayName = m_amfConfig->getActiveDisplays();
-    m_amfInfoObject.viewName = m_amfConfig->getActiveViews();
+    m_amfInfoObject->clipIdentifier = m_clipName;
+    m_amfInfoObject->displayName = m_amfConfig->getActiveDisplays();
+    m_amfInfoObject->viewName = m_amfConfig->getActiveViews();
     determineClipColorSpace();
 }
 
@@ -537,7 +581,7 @@ void AMFParser::Impl::processInputTransform()
             if (cs != NULL)
             {
                 m_amfConfig->addColorSpace(cs);
-                m_amfInfoObject.inputColorSpaceName = cs->getName();
+                m_amfInfoObject->inputColorSpaceName = cs->getName();
 
                 auto it = CAMERA_MAPPING.find(cs->getName());
                 if (it != CAMERA_MAPPING.end())
@@ -565,7 +609,7 @@ void AMFParser::Impl::processInputTransform()
             cs->setTransform(ft, COLORSPACE_DIR_TO_REFERENCE);
 
             m_amfConfig->addColorSpace(cs);
-            m_amfInfoObject.inputColorSpaceName = cs->getName();
+            m_amfInfoObject->inputColorSpaceName = cs->getName();
         }
     }
 
@@ -630,7 +674,7 @@ void AMFParser::Impl::processInputTransform()
                     m_amfConfig->setActiveDisplays(dispName.c_str());
                     m_amfConfig->setActiveViews(viewName.c_str());
                     m_amfConfig->addColorSpace(cs);
-                    m_amfInfoObject.inputColorSpaceName = cs->getName();
+                    m_amfInfoObject->inputColorSpaceName = cs->getName();
                 }
             }
         }
@@ -745,12 +789,12 @@ void AMFParser::Impl::processOutputTransform()
 
 void AMFParser::Impl::processLookTransforms()
 {
-    m_amfInfoObject.numLooksApplied = 0;
+    m_amfInfoObject->numLooksApplied = 0;
     auto index = 1;
     for (auto it = m_look.begin(); it != m_look.end(); it++)
     {
         if (processLookTransform(**it, index))
-			m_amfInfoObject.numLooksApplied++;
+			m_amfInfoObject->numLooksApplied++;
         index++;
     }
 
@@ -1275,15 +1319,15 @@ void AMFParser::Impl::determineClipColorSpace()
     bool mustApplyOutput = mustApply(m_output, false);
     if (!mustApplyOutput)
     {
-        m_amfInfoObject.clipColorSpaceName = m_amfConfig->getActiveDisplays();
+        m_amfInfoObject->clipColorSpaceName = m_amfConfig->getActiveDisplays();
         return;
     }
     else if (mustApplyInput)
     {
-        m_amfInfoObject.clipColorSpaceName = m_amfInfoObject.inputColorSpaceName;
+        m_amfInfoObject->clipColorSpaceName = m_amfInfoObject->inputColorSpaceName;
         return;
     }
-    m_amfInfoObject.clipColorSpaceName = ACES;
+    m_amfInfoObject->clipColorSpaceName = ACES;
 }
 
 void AMFParser::Impl::throwMessage(const std::string& error) const
@@ -1294,19 +1338,15 @@ void AMFParser::Impl::throwMessage(const std::string& error) const
     throw Exception(os.str().c_str());
 }
 
-ConstConfigRcPtr AMFParser::buildConfig(AMFInfo& amfInfoObject, const char* amfFilePath)
+ConstConfigRcPtr AMFParser::buildConfig(AMFInfoRcPtr amfInfoObject, const char* amfFilePath)
 {
-    if (!m_impl)
-    {
-        delete m_impl;
-        m_impl = NULL;
-    }
-    m_impl = new Impl(amfInfoObject, amfFilePath);
-    m_impl->parse();
+    if (m_impl == NULL)
+        m_impl = new Impl();
+    m_impl->parse(amfInfoObject, amfFilePath);
     return m_impl->getConfig();
 }
 
-OCIOEXPORT ConstConfigRcPtr CreateFromAMF(AMFInfo& amfInfoObject, const char* amfFilePath)
+OCIOEXPORT ConstConfigRcPtr CreateFromAMF(AMFInfoRcPtr amfInfoObject, const char* amfFilePath)
 {
     AMFParser p;
     return p.buildConfig(amfInfoObject, amfFilePath);
