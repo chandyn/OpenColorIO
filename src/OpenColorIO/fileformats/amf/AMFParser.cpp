@@ -4,7 +4,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <stack>
-#include <string>
+#include <string.h>
 
 #include "fileformats/amf/AMFParser.h"
 #include "expat.h"
@@ -342,7 +342,7 @@ void AMFParser::Impl::StartElementHandler(void* userData, const XML_Char* name, 
 
 bool AMFParser::Impl::HandleInputTransformStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts)
 {
-    if ((0 == strcmp(name, AMF_TAG_INPUT_TRANSFORM)))
+    if ((0 == std::strcmp(name, AMF_TAG_INPUT_TRANSFORM)))
     {
         pImpl->m_isInsideInputTransform = true;
         for (int i = 0; atts[i]; i += 2)
@@ -357,7 +357,7 @@ bool AMFParser::Impl::HandleInputTransformStartElement(AMFParser::Impl* pImpl, c
     else if (pImpl->m_isInsideInputTransform)
     {
         pImpl->m_currentElement = name;
-        if (0 == strcmp(name, AMF_TAG_IODT) || 0 == strcmp(name, AMF_TAG_IRRT))
+        if (0 == std::strcmp(name, AMF_TAG_IODT) || 0 == std::strcmp(name, AMF_TAG_IRRT))
         {
             pImpl->m_input.m_isInverse = true;
             pImpl->m_input.addTld(name);
@@ -370,7 +370,7 @@ bool AMFParser::Impl::HandleInputTransformStartElement(AMFParser::Impl* pImpl, c
 
 bool AMFParser::Impl::HandleOutputTransformStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts)
 {
-    if ((0 == strcmp(name, AMF_TAG_OUTPUT_TRANSFORM)))
+    if ((0 == std::strcmp(name, AMF_TAG_OUTPUT_TRANSFORM)))
     {
         pImpl->m_isInsideOutputTransform = true;
         for (int i = 0; atts[i]; i += 2)
@@ -385,7 +385,7 @@ bool AMFParser::Impl::HandleOutputTransformStartElement(AMFParser::Impl* pImpl, 
     else if (pImpl->m_isInsideOutputTransform)
     {
         pImpl->m_currentElement = name;
-        if (0 == strcmp(name, AMF_TAG_ODT) || 0 == strcmp(name, AMF_TAG_RRT))
+        if (0 == std::strcmp(name, AMF_TAG_ODT) || 0 == std::strcmp(name, AMF_TAG_RRT))
             pImpl->m_output.addTld(name);
         return true;
     }
@@ -395,7 +395,7 @@ bool AMFParser::Impl::HandleOutputTransformStartElement(AMFParser::Impl* pImpl, 
 
 bool AMFParser::Impl::HandleLookTransformStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts)
 {
-    if ((0 == strcmp(name, AMF_TAG_LOOK_TRANSFORM)))
+    if ((0 == std::strcmp(name, AMF_TAG_LOOK_TRANSFORM)))
     {
         pImpl->m_isInsideLookTransform = true;
         AMFTransformRcPtr amfTransform = AMFTransform::Create();
@@ -419,7 +419,7 @@ bool AMFParser::Impl::HandleLookTransformStartElement(AMFParser::Impl* pImpl, co
 
 bool AMFParser::Impl::HandleClipIdStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts)
 {
-    if ((0 == strcmp(name, AMF_TAG_CLIPID)))
+    if ((0 == std::strcmp(name, AMF_TAG_CLIPID)))
     {
         pImpl->m_isInsideClipId = true;
         for (int i = 0; atts[i]; i += 2)
@@ -455,7 +455,7 @@ void AMFParser::Impl::EndElementHandler(void* userData, const XML_Char* name)
 
 bool AMFParser::Impl::HandleInputTransformEndElement(AMFParser::Impl* pImpl, const XML_Char* name)
 {
-    if ((0 == strcmp(name, AMF_TAG_INPUT_TRANSFORM)))
+    if ((0 == std::strcmp(name, AMF_TAG_INPUT_TRANSFORM)))
     {
         pImpl->m_isInsideInputTransform = false;
         pImpl->m_input.removeTld();
@@ -464,7 +464,7 @@ bool AMFParser::Impl::HandleInputTransformEndElement(AMFParser::Impl* pImpl, con
     else if (pImpl->m_isInsideInputTransform)
     {
         pImpl->m_currentElement.clear();
-        if (0 == strcmp(name, AMF_TAG_IODT) || 0 == strcmp(name, AMF_TAG_IRRT))
+        if (0 == std::strcmp(name, AMF_TAG_IODT) || 0 == std::strcmp(name, AMF_TAG_IRRT))
             pImpl->m_input.removeTld();
         return true;
     }
@@ -474,7 +474,7 @@ bool AMFParser::Impl::HandleInputTransformEndElement(AMFParser::Impl* pImpl, con
 
 bool AMFParser::Impl::HandleOutputTransformEndElement(AMFParser::Impl* pImpl, const XML_Char* name)
 {
-    if ((0 == strcmp(name, AMF_TAG_OUTPUT_TRANSFORM)))
+    if ((0 == std::strcmp(name, AMF_TAG_OUTPUT_TRANSFORM)))
     {
         pImpl->m_isInsideOutputTransform = false;
         pImpl->m_output.removeTld();
@@ -483,7 +483,7 @@ bool AMFParser::Impl::HandleOutputTransformEndElement(AMFParser::Impl* pImpl, co
     else if (pImpl->m_isInsideOutputTransform)
     {
         pImpl->m_currentElement.clear();
-        if (0 == strcmp(name, AMF_TAG_ODT) || 0 == strcmp(name, AMF_TAG_RRT))
+        if (0 == std::strcmp(name, AMF_TAG_ODT) || 0 == std::strcmp(name, AMF_TAG_RRT))
             pImpl->m_output.removeTld();
         return true;
     }
@@ -493,7 +493,7 @@ bool AMFParser::Impl::HandleOutputTransformEndElement(AMFParser::Impl* pImpl, co
 
 bool AMFParser::Impl::HandleLookTransformEndElement(AMFParser::Impl* pImpl, const XML_Char* name)
 {
-    if ((0 == strcmp(name, AMF_TAG_LOOK_TRANSFORM)))
+    if ((0 == std::strcmp(name, AMF_TAG_LOOK_TRANSFORM)))
     {
         pImpl->m_isInsideLookTransform = false;
         return true;
@@ -509,7 +509,7 @@ bool AMFParser::Impl::HandleLookTransformEndElement(AMFParser::Impl* pImpl, cons
 
 bool AMFParser::Impl::HandleClipIdEndElement(AMFParser::Impl* pImpl, const XML_Char* name)
 {
-    if ((0 == strcmp(name, AMF_TAG_CLIPID)))
+    if ((0 == std::strcmp(name, AMF_TAG_CLIPID)))
     {
         pImpl->m_isInsideClipId = false;
         return true;
@@ -537,17 +537,17 @@ void AMFParser::Impl::CharacterDataHandler(void* userData, const XML_Char* s, in
     if (pImpl->m_isInsideInputTransform && !pImpl->m_currentElement.empty())
     {
         std::string currentParentElement = pImpl->m_input.m_tldTemp.empty() ? "" : pImpl->m_input.m_tldTemp.top();
-        if (0 == strcmp(currentParentElement.c_str(), AMF_TAG_INPUT_TRANSFORM))
+        if (0 == std::strcmp(currentParentElement.c_str(), AMF_TAG_INPUT_TRANSFORM))
             pImpl->m_input.addTldElement(pImpl->m_currentElement, value);
-        else if (0 == strcmp(currentParentElement.c_str(), AMF_TAG_IODT))
+        else if (0 == std::strcmp(currentParentElement.c_str(), AMF_TAG_IODT))
             pImpl->m_input.addSubElement(pImpl->m_currentElement, value);
     }
     else if (pImpl->m_isInsideOutputTransform && !pImpl->m_currentElement.empty())
     {
         std::string currentParentElement = pImpl->m_output.m_tldTemp.empty() ? "" : pImpl->m_output.m_tldTemp.top();
-        if (0 == strcmp(currentParentElement.c_str(), AMF_TAG_OUTPUT_TRANSFORM))
+        if (0 == std::strcmp(currentParentElement.c_str(), AMF_TAG_OUTPUT_TRANSFORM))
             pImpl->m_output.addTldElement(pImpl->m_currentElement, value);
-        else if (0 == strcmp(currentParentElement.c_str(), AMF_TAG_ODT))
+        else if (0 == std::strcmp(currentParentElement.c_str(), AMF_TAG_ODT))
             pImpl->m_output.addSubElement(pImpl->m_currentElement, value);
     }
     else if (pImpl->m_isInsideLookTransform && !pImpl->m_currentElement.empty())
@@ -575,7 +575,7 @@ void AMFParser::Impl::processInputTransform()
 {
     for (auto& elem : m_input.m_tldElements)
     {
-        if (0 == strcmp(elem.first.c_str(), AMF_TAG_TRANSFORMID))
+        if (0 == std::strcmp(elem.first.c_str(), AMF_TAG_TRANSFORMID))
         {
             ConstColorSpaceRcPtr cs = searchColorSpaces(elem.second.c_str());
             if (cs != NULL)
@@ -591,7 +591,7 @@ void AMFParser::Impl::processInputTransform()
                 }
             }
         }
-        else if (0 == strcmp(elem.first.c_str(), AMF_TAG_FILE))
+        else if (0 == std::strcmp(elem.first.c_str(), AMF_TAG_FILE))
         {
             FileTransformRcPtr ft = FileTransform::Create();
             checkLutPath(elem.second.c_str());
@@ -616,15 +616,15 @@ void AMFParser::Impl::processInputTransform()
     auto it = m_input.m_subElements.begin();
     while (it != m_input.m_subElements.end())
     {
-        if (0 == strcmp(it->first.c_str(), AMF_TAG_IODT))
+        if (0 == std::strcmp(it->first.c_str(), AMF_TAG_IODT))
         {
             for (++it; it != m_input.m_subElements.end(); ++it)
             {
-                if (0 == strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
+                if (0 == std::strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
                 {
                     processOutputTransformId(it->second.c_str(), TRANSFORM_DIR_INVERSE);
                 }
-                else if (0 == strcmp(it->first.c_str(), AMF_TAG_FILE))
+                else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_FILE))
                 {
                     FileTransformRcPtr odtFt = FileTransform::Create();
                     checkLutPath(it->second.c_str());
@@ -636,12 +636,12 @@ void AMFParser::Impl::processInputTransform()
                     FileTransformRcPtr rrtFt = FileTransform::Create();
                     for (auto itRrt = m_input.m_subElements.begin(); itRrt != m_input.m_subElements.end(); itRrt++)
                     {
-                        if (0 == strcmp(itRrt->first.c_str(), AMF_TAG_RRT))
+                        if (0 == std::strcmp(itRrt->first.c_str(), AMF_TAG_RRT))
                         {
                             ++itRrt;
-                            while (itRrt != m_input.m_subElements.end() && strcmp(itRrt->first.c_str(), AMF_TAG_RRT))
+                            while (itRrt != m_input.m_subElements.end() && std::strcmp(itRrt->first.c_str(), AMF_TAG_RRT))
                             {
-                                if (0 == strcmp(itRrt->first.c_str(), AMF_TAG_FILE))
+                                if (0 == std::strcmp(itRrt->first.c_str(), AMF_TAG_FILE))
                                 {
                                     checkLutPath(itRrt->second.c_str());
                                     odtFt->setSrc(itRrt->second.c_str());
@@ -685,12 +685,12 @@ void AMFParser::Impl::processOutputTransform()
 {
     for (auto& elem : m_output.m_tldElements)
     {
-        if (0 == strcmp(elem.first.c_str(), AMF_TAG_TRANSFORMID))
+        if (0 == std::strcmp(elem.first.c_str(), AMF_TAG_TRANSFORMID))
         {
             processOutputTransformId(elem.second.c_str(), TRANSFORM_DIR_FORWARD);
             return;
         }
-        else if (0 == strcmp(elem.first.c_str(), AMF_TAG_FILE))
+        else if (0 == std::strcmp(elem.first.c_str(), AMF_TAG_FILE))
         {
             FileTransformRcPtr ft = FileTransform::Create();
             checkLutPath(elem.second.c_str());
@@ -723,15 +723,15 @@ void AMFParser::Impl::processOutputTransform()
     auto it = m_output.m_subElements.begin();
     while (it != m_output.m_subElements.end())
     {
-        if (0 == strcmp(it->first.c_str(), AMF_TAG_ODT))
+        if (0 == std::strcmp(it->first.c_str(), AMF_TAG_ODT))
         {
             for (++it; it != m_output.m_subElements.end(); ++it)
             {
-                if (0 == strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
+                if (0 == std::strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
                 {
                     processOutputTransformId(it->second.c_str(), TRANSFORM_DIR_FORWARD);
                 }
-                else if (0 == strcmp(it->first.c_str(), AMF_TAG_FILE))
+                else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_FILE))
                 {
                     FileTransformRcPtr odtFt = FileTransform::Create();
                     checkLutPath(it->second.c_str());
@@ -743,12 +743,12 @@ void AMFParser::Impl::processOutputTransform()
                     FileTransformRcPtr rrtFt = FileTransform::Create();
                     for (auto itRrt = m_output.m_subElements.begin(); itRrt != m_output.m_subElements.end(); itRrt++)
                     {
-                        if (0 == strcmp(itRrt->first.c_str(), AMF_TAG_RRT))
+                        if (0 == std::strcmp(itRrt->first.c_str(), AMF_TAG_RRT))
                         {
                             ++itRrt;
-                            while (itRrt != m_output.m_subElements.end() && strcmp(itRrt->first.c_str(), AMF_TAG_RRT))
+                            while (itRrt != m_output.m_subElements.end() && std::strcmp(itRrt->first.c_str(), AMF_TAG_RRT))
                             {
-                                if (0 == strcmp(itRrt->first.c_str(), AMF_TAG_FILE))
+                                if (0 == std::strcmp(itRrt->first.c_str(), AMF_TAG_FILE))
                                 {
                                     checkLutPath(itRrt->second.c_str());
                                     odtFt->setSrc(itRrt->second.c_str());
@@ -804,7 +804,7 @@ void AMFParser::Impl::processLookTransforms()
     for (auto index = 0; index < numLooks; index++)
     {
         std::string lookName = m_amfConfig->getLookNameByIndex(index);
-        if ((lookName.find("(Applied)") != std::string::npos) || (0 == strcmp(lookName.c_str(), ACES_LOOK_NAME)))
+        if ((lookName.find("(Applied)") != std::string::npos) || (0 == std::strcmp(lookName.c_str(), ACES_LOOK_NAME)))
         {
         }
         else
@@ -840,12 +840,12 @@ void AMFParser::Impl::processClipId()
 {
     for (auto& elem : m_clipId.m_subElements)
     {
-        if (0 == strcmp(elem.first.c_str(), AMF_TAG_CLIPNAME))
+        if (0 == std::strcmp(elem.first.c_str(), AMF_TAG_CLIPNAME))
         {
             m_clipName = elem.second.c_str();
             break;
         }
-        if (0 == strcmp(elem.first.c_str(), AMF_TAG_UUID))
+        if (0 == std::strcmp(elem.first.c_str(), AMF_TAG_UUID))
         {
             m_clipName = elem.second.c_str();
             break;
@@ -996,7 +996,7 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
 
     for (auto it = look.m_subElements.begin(); it != look.m_subElements.end(); it++)
     {
-        if (0 == strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
+        if (0 == std::strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
         {
             LookRcPtr lk = searchLookTransforms(it->second.c_str());
             if (lk != NULL)
@@ -1006,7 +1006,7 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
                 return wasApplied;
             }
         }
-        else if (0 == strcmp(it->first.c_str(), AMF_TAG_FILE))
+        else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_FILE))
         {
             std::string desc;
             getFileDescription(look, desc);
@@ -1039,21 +1039,21 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
 
     for (auto it = look.m_subElements.begin(); it != look.m_subElements.end();)
     {
-        if (0 == strcmp(it->first.c_str(), AMF_TAG_SOPNODE))
+        if (0 == std::strcmp(it->first.c_str(), AMF_TAG_SOPNODE))
         {
             hasCdl = true;
             ++it;
             while (it != look.m_subElements.end())
             {
-                if (0 == strcmp(it->first.c_str(), AMF_TAG_SLOPE))
+                if (0 == std::strcmp(it->first.c_str(), AMF_TAG_SLOPE))
                 {
                     slope = it->second.c_str();
                 }
-                else if (0 == strcmp(it->first.c_str(), AMF_TAG_OFFSET))
+                else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_OFFSET))
                 {
                     offset = it->second.c_str();
                 }
-                else if (0 == strcmp(it->first.c_str(), AMF_TAG_POWER))
+                else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_POWER))
                 {
                     power = it->second.c_str();
                 }
@@ -1066,21 +1066,21 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
 
     for (auto it = look.m_subElements.begin(); it != look.m_subElements.end();)
     {
-        if (0 == strcmp(it->first.c_str(), AMF_TAG_ASCSOP))
+        if (0 == std::strcmp(it->first.c_str(), AMF_TAG_ASCSOP))
         {
             hasCdl = true;
             ++it;
             while (it != look.m_subElements.end())
             {
-                if (0 == strcmp(it->first.c_str(), AMF_TAG_SLOPE))
+                if (0 == std::strcmp(it->first.c_str(), AMF_TAG_SLOPE))
                 {
                     slope = it->second.c_str();
                 }
-                else if (0 == strcmp(it->first.c_str(), AMF_TAG_OFFSET))
+                else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_OFFSET))
                 {
                     offset = it->second.c_str();
                 }
-                else if (0 == strcmp(it->first.c_str(), AMF_TAG_POWER))
+                else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_POWER))
                 {
                     power = it->second.c_str();
                 }
@@ -1093,13 +1093,13 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
 
     for (auto it = look.m_subElements.begin(); it != look.m_subElements.end();)
     {
-        if (0 == strcmp(it->first.c_str(), AMF_TAG_SATNODE))
+        if (0 == std::strcmp(it->first.c_str(), AMF_TAG_SATNODE))
         {
             hasCdl = true;
             ++it;
             while (it != look.m_subElements.end())
             {
-                if (0 == strcmp(it->first.c_str(), AMF_TAG_SAT))
+                if (0 == std::strcmp(it->first.c_str(), AMF_TAG_SAT))
                 {
                     sat = it->second.c_str();
                 }
@@ -1112,13 +1112,13 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
 
     for (auto it = look.m_subElements.begin(); it != look.m_subElements.end();)
     {
-        if (0 == strcmp(it->first.c_str(), AMF_TAG_ASCSAT))
+        if (0 == std::strcmp(it->first.c_str(), AMF_TAG_ASCSAT))
         {
             hasCdl = true;
             ++it;
             while (it != look.m_subElements.end())
             {
-                if (0 == strcmp(it->first.c_str(), AMF_TAG_SAT))
+                if (0 == std::strcmp(it->first.c_str(), AMF_TAG_SAT))
                 {
                     sat = it->second.c_str();
                 }
@@ -1189,16 +1189,16 @@ void AMFParser::Impl::loadCdlWsTransform(AMFTransform& amft, bool isTo, Transfor
 {
     for (auto it = amft.m_subElements.begin(); it != amft.m_subElements.end();)
     {
-        if (0 == strcmp(it->first.c_str(), AMF_TAG_CDLWS))
+        if (0 == std::strcmp(it->first.c_str(), AMF_TAG_CDLWS))
         {
             ++it;
             while (it != amft.m_subElements.end())
             {
-                if (0 == strcmp(it->first.c_str(), isTo ? AMF_TAG_TOCDLWS : AMF_TAG_FROMCDLWS))
+                if (0 == std::strcmp(it->first.c_str(), isTo ? AMF_TAG_TOCDLWS : AMF_TAG_FROMCDLWS))
                 {
                     while (it != amft.m_subElements.end())
                     {
-                        if (0 == strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
+                        if (0 == std::strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
                         {
                             ConstColorSpaceRcPtr cs = searchColorSpaces(it->second.c_str());
                             m_amfConfig->addColorSpace(cs);
@@ -1210,7 +1210,7 @@ void AMFParser::Impl::loadCdlWsTransform(AMFTransform& amft, bool isTo, Transfor
                             t = cst;
                             break;
                         }
-                        else if (0 == strcmp(it->first.c_str(), AMF_TAG_FILE))
+                        else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_FILE))
                         {
                             FileTransformRcPtr ft = FileTransform::Create();
                             checkLutPath(it->second.c_str());
@@ -1242,7 +1242,7 @@ bool AMFParser::Impl::mustApply(AMFTransform& amft, bool isLook)
 {
     for (auto it = amft.m_attributes.begin(); it != amft.m_attributes.end(); it++)
     {
-        if (0 == strcmp(it->first.c_str(), "applied"))
+        if (0 == std::strcmp(it->first.c_str(), "applied"))
         {
             if (0 == _strcmpi(it->second.c_str(), "true"))
             {
@@ -1257,7 +1257,7 @@ void AMFParser::Impl::getCCCId(AMFTransform& amft, std::string& cccId)
 {
     for (auto it = amft.m_subElements.begin(); it != amft.m_subElements.end(); it++)
     {
-        if (0 == strcmp(it->first.c_str(), AMF_TAG_CDLCCR))
+        if (0 == std::strcmp(it->first.c_str(), AMF_TAG_CDLCCR))
         {
             cccId = it->second.c_str();
             return;
@@ -1295,7 +1295,7 @@ void AMFParser::Impl::getFileDescription(AMFTransform& amft, std::string& desc)
 {
     for (auto it = amft.m_subElements.begin(); it != amft.m_subElements.end(); it++)
     {
-        if (0 == strcmp(it->first.c_str(), AMF_TAG_DESC))
+        if (0 == std::strcmp(it->first.c_str(), AMF_TAG_DESC))
         {
             desc = it->second.c_str();
             return;
