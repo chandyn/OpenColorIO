@@ -266,6 +266,7 @@ void AMFParser::Impl::parse()
     m_amfInfoObject.clipIdentifier = m_clipName;
     m_amfInfoObject.displayName = m_amfConfig->getActiveDisplays();
     m_amfInfoObject.viewName = m_amfConfig->getActiveViews();
+    determineClipColorSpace();
 }
 
 void AMFParser::Impl::parse(const std::string& buffer, bool lastLine)
@@ -1275,10 +1276,12 @@ void AMFParser::Impl::determineClipColorSpace()
     if (!mustApplyOutput)
     {
         m_amfInfoObject.clipColorSpaceName = m_amfConfig->getActiveDisplays();
+        return;
     }
     else if (!mustApplyInput)
     {
         m_amfInfoObject.clipColorSpaceName = m_amfInfoObject.inputColorSpaceName;
+        return;
     }
     m_amfInfoObject.clipColorSpaceName = ACES;
 }
