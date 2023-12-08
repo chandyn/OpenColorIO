@@ -4,6 +4,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <stack>
+#include <string>
 
 #include "fileformats/amf/AMFParser.h"
 #include "expat.h"
@@ -205,7 +206,7 @@ private:
     void addInactiveCS(const char* csName);
     ConstViewTransformRcPtr searchViewTransforms(std::string acesId);
 
-    void processLookTransform(AMFTransform& look, int index);
+    bool processLookTransform(AMFTransform& look, int index);
     void loadCdlWsTransform(AMFTransform& amft, bool isTo, TransformRcPtr& t);
     void extractThreeFloats(std::string str, double* arr);
     bool mustApply(AMFTransform& amft, bool isLook);
@@ -215,6 +216,7 @@ private:
     ConstColorSpaceRcPtr searchColorSpaces(std::string acesId);
     void getFileDescription(AMFTransform& amft, std::string& desc);
     void checkLutPath(const char* lutPath);
+    void determineClipColorSpace();
 
     void throwMessage(const std::string& error) const;
 
@@ -260,6 +262,10 @@ void AMFParser::Impl::parse()
     processInputTransform();
     processOutputTransform();
     processLookTransforms();
+
+    m_amfInfoObject.clipIdentifier = m_clipName;
+    m_amfInfoObject.displayName = m_amfConfig->getActiveDisplays();
+    m_amfInfoObject.viewName = m_amfConfig->getActiveViews();
 }
 
 void AMFParser::Impl::parse(const std::string& buffer, bool lastLine)
@@ -530,6 +536,7 @@ void AMFParser::Impl::processInputTransform()
             if (cs != NULL)
             {
                 m_amfConfig->addColorSpace(cs);
+                m_amfInfoObject.inputColorSpaceName = cs->getName();
 
                 auto it = CAMERA_MAPPING.find(cs->getName());
                 if (it != CAMERA_MAPPING.end())
@@ -557,6 +564,7 @@ void AMFParser::Impl::processInputTransform()
             cs->setTransform(ft, COLORSPACE_DIR_TO_REFERENCE);
 
             m_amfConfig->addColorSpace(cs);
+            m_amfInfoObject.inputColorSpaceName = cs->getName();
         }
     }
 
@@ -621,6 +629,7 @@ void AMFParser::Impl::processInputTransform()
                     m_amfConfig->setActiveDisplays(dispName.c_str());
                     m_amfConfig->setActiveViews(viewName.c_str());
                     m_amfConfig->addColorSpace(cs);
+                    m_amfInfoObject.inputColorSpaceName = cs->getName();
                 }
             }
         }
@@ -735,10 +744,12 @@ void AMFParser::Impl::processOutputTransform()
 
 void AMFParser::Impl::processLookTransforms()
 {
+    m_amfInfoObject.numLooksApplied = 0;
     auto index = 1;
     for (auto it = m_look.begin(); it != m_look.end(); it++)
     {
-        processLookTransform(**it, index);
+        if (processLookTransform(**it, index))
+			m_amfInfoObject.numLooksApplied++;
         index++;
     }
 
@@ -929,7 +940,7 @@ ConstViewTransformRcPtr AMFParser::Impl::searchViewTransforms(std::string acesId
     return NULL;
 }
 
-void AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
+bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
 {
     auto wasApplied = !mustApply(look, "Look");
 
@@ -947,7 +958,7 @@ void AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
             {
                 lk->setName(lookName.c_str());
                 m_amfConfig->addLook(lk);
-                return;
+                return wasApplied;
             }
         }
         else if (0 == strcmp(it->first.c_str(), AMF_TAG_FILE))
@@ -974,7 +985,7 @@ void AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
             lk->setDescription(desc.c_str());
 
             m_amfConfig->addLook(lk);
-            return;
+            return wasApplied;
         }
     }
 
@@ -1124,7 +1135,9 @@ void AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
         lk->setTransform(gt);
         lk->setDescription("ASC CDL");
         m_amfConfig->addLook(lk);
+        return wasApplied;
     }
+    return false;
 }
 
 void AMFParser::Impl::loadCdlWsTransform(AMFTransform& amft, bool isTo, TransformRcPtr& t)
@@ -1255,6 +1268,21 @@ void AMFParser::Impl::checkLutPath(const char* lutPath)
     //TODO: skip this exception while we're debugging the parser: throwMessage(error);
 }
 
+void AMFParser::Impl::determineClipColorSpace()
+{
+    bool mustApplyInput = mustApply(m_input, false);
+    bool mustApplyOutput = mustApply(m_output, false);
+    if (!mustApplyOutput)
+    {
+        m_amfInfoObject.clipColorSpaceName = m_amfConfig->getActiveDisplays();
+    }
+    else if (!mustApplyInput)
+    {
+        m_amfInfoObject.clipColorSpaceName = m_amfInfoObject.inputColorSpaceName;
+    }
+    m_amfInfoObject.clipColorSpaceName = ACES;
+}
+
 void AMFParser::Impl::throwMessage(const std::string& error) const
 {
     std::ostringstream os;
@@ -1280,12 +1308,5 @@ OCIOEXPORT ConstConfigRcPtr CreateFromAMF(AMFInfo& amfInfoObject, const char* am
     AMFParser p;
     return p.buildConfig(amfInfoObject, amfFilePath);
 }
-
-/*
-* TODO
-* 
-* need to add following functions:
-* determine_clip_colorspace
-*/
 
 } // namespace OCIO_NAMESPACE
