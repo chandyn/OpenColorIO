@@ -111,39 +111,6 @@ private:
         std::vector<std::pair<std::string, std::string>> m_attributes;
     };
 
-    class AMFInputTransform : public AMFTransform
-    {
-    public:
-        AMFInputTransform() : m_isInverse(false) {};
-
-        void reset()
-        {
-            AMFTransform::reset();
-			m_isInverse = false;
-			m_tldTemp = std::stack<std::string>();
-			m_tldElements.clear();
-        }
-
-        void addTld(const std::string& name)
-        {
-            m_tldTemp.push(name);
-        }
-
-        void removeTld()
-        {
-            m_tldTemp.pop();
-        }
-
-        void addTldElement(const std::string& name, const std::string& value)
-        {
-            m_tldElements.push_back(std::make_pair(name, value));
-        }
-
-        bool m_isInverse;
-        std::stack<std::string> m_tldTemp;
-        std::vector<std::pair<std::string, std::string>> m_tldElements;
-    };
-
     class AMFOutputTransform : public AMFTransform
     {
     public:
@@ -173,6 +140,20 @@ private:
         std::vector<std::pair<std::string, std::string>> m_tldElements;
     };
 
+    class AMFInputTransform : public AMFOutputTransform
+    {
+    public:
+        AMFInputTransform() : m_isInverse(false) {};
+
+        void reset()
+        {
+            AMFOutputTransform::reset();
+            m_isInverse = false;
+        }
+
+        bool m_isInverse;
+    };
+
 public:
     Impl(const Impl &) = delete;
     Impl & operator=(const Impl &) = delete;
@@ -194,12 +175,7 @@ public:
         XML_ParserFree(m_parser);
     }
 
-    void parse(AMFInfoRcPtr amfInfoObject, const char* amfFilePath);
-
-    const ConstConfigRcPtr getConfig() const
-    {
-        return m_amfConfig;
-    }
+    ConstConfigRcPtr parse(AMFInfoRcPtr amfInfoObject, const char* amfFilePath);
 
 private:
     void reset();
@@ -272,6 +248,7 @@ void AMFParser::Impl::reset()
         m_xmlStream.close();
     m_lineNumber = 0;
     m_refConfig = m_amfConfig = NULL;
+    m_amfInfoObject = NULL;
     m_clipId.reset();
     m_input.reset();
     m_output.reset();
@@ -282,7 +259,7 @@ void AMFParser::Impl::reset()
     m_clipName.clear();
 }
 
-void AMFParser::Impl::parse(AMFInfoRcPtr amfInfoObject, const char* amfFilePath)
+ConstConfigRcPtr AMFParser::Impl::parse(AMFInfoRcPtr amfInfoObject, const char* amfFilePath)
 {
     reset();
 
@@ -318,6 +295,8 @@ void AMFParser::Impl::parse(AMFInfoRcPtr amfInfoObject, const char* amfFilePath)
     m_amfInfoObject->displayName = m_amfConfig->getActiveDisplays();
     m_amfInfoObject->viewName = m_amfConfig->getActiveViews();
     determineClipColorSpace();
+
+    return m_amfConfig;
 }
 
 void AMFParser::Impl::parse(const std::string& buffer, bool lastLine)
@@ -906,7 +885,6 @@ void AMFParser::Impl::initAMFConfig()
     m_amfConfig->setRole("cie_xyz_d65_interchange", "CIE-XYZ-D65");
     m_amfConfig->setRole("color_timing", "ACEScct");
     m_amfConfig->setRole("compositing_log", "ACEScct");
-    //TODO: is NULL a valid value for default role?
     m_amfConfig->setRole("default", NULL);
 
     FileRulesRcPtr rules = FileRules::Create()->createEditableCopy();
@@ -922,8 +900,6 @@ void AMFParser::Impl::initAMFConfig()
     look->setName(ACES_LOOK_NAME);
     look->setProcessSpace(ACES);
     look->setTransform(cst);
-    //TODO: NULL is not allowed according to header but Py script is setting it to None so how do we achieve the same in C++?
-    //look->setInverseTransform(NULL);
     look->setDescription("");
     m_amfConfig->addLook(look);
 
@@ -1317,7 +1293,7 @@ void AMFParser::Impl::checkLutPath(const char* lutPath)
         return;
 
     std::string error = std::string("Invalid LUT Path: ") + std::string(lutPath);
-    //TODO: skip this exception while we're debugging the parser: throwMessage(error);
+    throwMessage(error);
 }
 
 void AMFParser::Impl::determineClipColorSpace()
@@ -1349,8 +1325,7 @@ ConstConfigRcPtr AMFParser::buildConfig(AMFInfoRcPtr amfInfoObject, const char* 
 {
     if (m_impl == NULL)
         m_impl = new Impl();
-    m_impl->parse(amfInfoObject, amfFilePath);
-    return m_impl->getConfig();
+    return m_impl->parse(amfInfoObject, amfFilePath);
 }
 
 OCIOEXPORT ConstConfigRcPtr CreateFromAMF(AMFInfoRcPtr amfInfoObject, const char* amfFilePath)

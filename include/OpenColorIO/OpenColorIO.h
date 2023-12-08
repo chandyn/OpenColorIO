@@ -3885,7 +3885,7 @@ public:
  *     the details of the pipeline described by the AMF file and how that relates to the config.
  *
  * \param[out] amfInfoObject Struct containing various details about the AMF pipeline.
- * \param istream Stream object containing the XML text of the AMF file.
+ * \param amfFilePath containing full path along with AMF file name.
  * \return The OCIO config implementing the AMF processing pipeline.
  *
  * \throw Exception if there is a problem interpreting the AMF file.
