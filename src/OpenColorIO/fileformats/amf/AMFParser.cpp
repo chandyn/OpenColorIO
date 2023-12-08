@@ -5,8 +5,6 @@
 #include <unordered_map>
 #include <stack>
 
-#include <OpenColorIO/FileRules.h>
-
 #include "fileformats/amf/AMFParser.h"
 #include "expat.h"
 
@@ -32,6 +30,7 @@ static constexpr char AMF_TAG_FILE[] = "aces:file";
 static constexpr char AMF_TAG_CDLCCR[] = "cdl:ColorCorrectionRef";
 
 static constexpr char AMF_TAG_IODT[] = "aces:inverseOutputDeviceTransform";
+static constexpr char AMF_TAG_IRRT[] = "aces:inverseReferenceRenderingTransform";
 static constexpr char AMF_TAG_ODT[] = "aces:outputDeviceTransform";
 static constexpr char AMF_TAG_RRT[] = "aces:referenceRenderingTransform";
 
@@ -277,7 +276,7 @@ bool AMFParser::Impl::HandleInputTransformStartElement(AMFParser::Impl* pImpl, c
     else if (pImpl->m_isInsideInputTransform)
     {
         pImpl->m_currentElement = name;
-        if (0 == strcmp(name, AMF_TAG_IODT))
+        if (0 == strcmp(name, AMF_TAG_IODT) || 0 == strcmp(name, AMF_TAG_IRRT))
         {
             pImpl->m_input.m_isInverse = true;
             pImpl->m_input.m_tldTemp.push(name);
@@ -384,7 +383,7 @@ bool AMFParser::Impl::HandleInputTransformEndElement(AMFParser::Impl* pImpl, con
     else if (pImpl->m_isInsideInputTransform)
     {
         pImpl->m_currentElement.clear();
-        if (0 == strcmp(name, AMF_TAG_IODT))
+        if (0 == strcmp(name, AMF_TAG_IODT) || 0 == strcmp(name, AMF_TAG_IRRT))
             pImpl->m_input.m_tldTemp.pop();
         return true;
     }
@@ -493,7 +492,7 @@ bool AMFParser::Impl::IsValidElement(AMFParser::Impl* pImpl, const XML_Char* nam
 
 void AMFParser::Impl::processInputTransform()
 {
-    for (auto& elem : m_input.m_subElements)
+    for (auto& elem : m_input.m_tldElements)
     {
         if (0 == strcmp(elem.first.c_str(), AMF_TAG_TRANSFORMID))
         {
@@ -528,6 +527,72 @@ void AMFParser::Impl::processInputTransform()
             cs->setTransform(ft, COLORSPACE_DIR_TO_REFERENCE);
 
             m_amfConfig->addColorSpace(cs);
+        }
+    }
+
+    auto it = m_input.m_subElements.begin();
+    while (it != m_input.m_subElements.end())
+    {
+        if (0 == strcmp(it->first.c_str(), AMF_TAG_IODT))
+        {
+            for (++it; it != m_input.m_subElements.end(); ++it)
+            {
+                if (0 == strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
+                {
+                    processOutputTransformId(it->second.c_str(), TRANSFORM_DIR_INVERSE);
+                }
+                else if (0 == strcmp(it->first.c_str(), AMF_TAG_FILE))
+                {
+                    FileTransformRcPtr odtFt = FileTransform::Create();
+                    checkLutPath(it->second.c_str());
+                    odtFt->setSrc(it->second.c_str());
+                    odtFt->setCCCId("");
+                    odtFt->setInterpolation(INTERP_BEST);
+                    odtFt->setDirection(TRANSFORM_DIR_INVERSE);
+
+                    FileTransformRcPtr rrtFt = FileTransform::Create();
+                    for (auto itRrt = m_input.m_subElements.begin(); itRrt != m_input.m_subElements.end(); itRrt++)
+                    {
+                        if (0 == strcmp(itRrt->first.c_str(), AMF_TAG_RRT))
+                        {
+                            ++itRrt;
+                            while (itRrt != m_input.m_subElements.end() && strcmp(itRrt->first.c_str(), AMF_TAG_RRT))
+                            {
+                                if (0 == strcmp(itRrt->first.c_str(), AMF_TAG_FILE))
+                                {
+                                    checkLutPath(itRrt->second.c_str());
+                                    odtFt->setSrc(itRrt->second.c_str());
+                                    odtFt->setCCCId("");
+                                    odtFt->setInterpolation(INTERP_BEST);
+                                    odtFt->setDirection(TRANSFORM_DIR_INVERSE);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    std::string name = "AMF Input Transform LUT -- " + m_clipName;
+                    std::string viewName = name;
+                    std::string dispName;
+                    getFileDescription(m_input, dispName);
+                    std::string family = "AMF/" + m_clipName;
+                    ColorSpaceRcPtr cs = ColorSpace::Create();
+                    cs->setName(name.c_str());
+                    cs->setFamily(family.c_str());
+                    cs->addCategory("file-io");
+
+                    GroupTransformRcPtr gt = GroupTransform::Create();
+                    if (rrtFt)
+                        gt->appendTransform(rrtFt);
+                    gt->appendTransform(odtFt);
+                    cs->setTransform(gt, COLORSPACE_DIR_FROM_REFERENCE);
+                    m_amfConfig->addDisplayView(dispName.c_str(), viewName.c_str(), name.c_str(), ACES_LOOK_NAME);
+                    addInactiveCS(name.c_str());
+                    m_amfConfig->setActiveDisplays(dispName.c_str());
+                    m_amfConfig->setActiveViews(viewName.c_str());
+                    m_amfConfig->addColorSpace(cs);
+                }
+            }
         }
     }
 }
