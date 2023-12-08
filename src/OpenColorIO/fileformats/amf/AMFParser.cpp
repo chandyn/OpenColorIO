@@ -12,6 +12,7 @@
 #define STRCASECMP _strcmpi
 #else
 #include <strings.h>
+#include <cstring>
 #define STRCASECMP strcasecmp
 #endif
 
