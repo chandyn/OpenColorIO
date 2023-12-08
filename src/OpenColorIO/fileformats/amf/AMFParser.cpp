@@ -105,7 +105,7 @@ public:
 
     void parse();
 
-    const ConstConfigRcPtr& getConfig() const
+    const ConstConfigRcPtr getConfig() const
     {
         return m_amfConfig;
     }
