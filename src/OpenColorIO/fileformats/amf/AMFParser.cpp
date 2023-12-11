@@ -908,7 +908,7 @@ void AMFParser::Impl::initAMFConfig()
 
     std::string amfPath = m_xmlFilePath;
     getPath(amfPath);
-    m_amfConfig->setSearchPath(amfPath.c_str());
+    m_amfConfig->addSearchPath(amfPath.c_str());
 }
 
 void AMFParser::Impl::processOutputTransformId(const char* transformId, TransformDirection tDirection)
