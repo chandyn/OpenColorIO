@@ -219,7 +219,8 @@ private:
 
     ConstColorSpaceRcPtr searchColorSpaces(std::string acesId);
     void getFileDescription(AMFTransform& amft, std::string& desc);
-    void checkLutPath(const char* lutPath);
+    void getPath(std::string& path);
+    void checkLutPath(std::string& lutPath);
     void determineClipColorSpace();
 
     void throwMessage(const std::string& error) const;
@@ -580,7 +581,7 @@ void AMFParser::Impl::processInputTransform()
         else if (0 == std::strcmp(elem.first.c_str(), AMF_TAG_FILE))
         {
             FileTransformRcPtr ft = FileTransform::Create();
-            checkLutPath(elem.second.c_str());
+            checkLutPath(elem.second);
             ft->setSrc(elem.second.c_str());
             ft->setCCCId("");
             ft->setInterpolation(INTERP_BEST);
@@ -613,7 +614,7 @@ void AMFParser::Impl::processInputTransform()
                 else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_FILE))
                 {
                     FileTransformRcPtr odtFt = FileTransform::Create();
-                    checkLutPath(it->second.c_str());
+                    checkLutPath(it->second);
                     odtFt->setSrc(it->second.c_str());
                     odtFt->setCCCId("");
                     odtFt->setInterpolation(INTERP_BEST);
@@ -629,7 +630,7 @@ void AMFParser::Impl::processInputTransform()
                             {
                                 if (0 == std::strcmp(itRrt->first.c_str(), AMF_TAG_FILE))
                                 {
-                                    checkLutPath(itRrt->second.c_str());
+                                    checkLutPath(itRrt->second);
                                     odtFt->setSrc(itRrt->second.c_str());
                                     odtFt->setCCCId("");
                                     odtFt->setInterpolation(INTERP_BEST);
@@ -679,7 +680,7 @@ void AMFParser::Impl::processOutputTransform()
         else if (0 == std::strcmp(elem.first.c_str(), AMF_TAG_FILE))
         {
             FileTransformRcPtr ft = FileTransform::Create();
-            checkLutPath(elem.second.c_str());
+            checkLutPath(elem.second);
             ft->setSrc(elem.second.c_str());
             ft->setCCCId("");
             ft->setInterpolation(INTERP_BEST);
@@ -720,7 +721,7 @@ void AMFParser::Impl::processOutputTransform()
                 else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_FILE))
                 {
                     FileTransformRcPtr odtFt = FileTransform::Create();
-                    checkLutPath(it->second.c_str());
+                    checkLutPath(it->second);
                     odtFt->setSrc(it->second.c_str());
                     odtFt->setCCCId("");
                     odtFt->setInterpolation(INTERP_BEST);
@@ -736,7 +737,7 @@ void AMFParser::Impl::processOutputTransform()
                             {
                                 if (0 == std::strcmp(itRrt->first.c_str(), AMF_TAG_FILE))
                                 {
-                                    checkLutPath(itRrt->second.c_str());
+                                    checkLutPath(itRrt->second);
                                     odtFt->setSrc(itRrt->second.c_str());
                                     odtFt->setCCCId("");
                                     odtFt->setInterpolation(INTERP_BEST);
@@ -905,7 +906,9 @@ void AMFParser::Impl::initAMFConfig()
 
     m_amfConfig->addEnvironmentVar(CONTEXT_NAME, ACES);
 
-    m_amfConfig->setSearchPath(".");
+    std::string amfPath = m_xmlFilePath;
+    getPath(amfPath);
+    m_amfConfig->setSearchPath(amfPath.c_str());
 }
 
 void AMFParser::Impl::processOutputTransformId(const char* transformId, TransformDirection tDirection)
@@ -1000,7 +1003,7 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
                 desc += " (" + cccid + ")";
 
             FileTransformRcPtr ft = FileTransform::Create();
-            checkLutPath(it->second.c_str());
+            checkLutPath(it->second);
             ft->setSrc(it->second.c_str());
             ft->setCCCId(cccid.c_str());
             ft->setInterpolation(INTERP_BEST);
@@ -1196,7 +1199,7 @@ void AMFParser::Impl::loadCdlWsTransform(AMFTransform& amft, bool isTo, Transfor
                         else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_FILE))
                         {
                             FileTransformRcPtr ft = FileTransform::Create();
-                            checkLutPath(it->second.c_str());
+                            checkLutPath(it->second);
                             ft->setSrc(it->second.c_str());
                             ft->setCCCId("");
                             ft->setInterpolation(INTERP_BEST);
@@ -1286,14 +1289,35 @@ void AMFParser::Impl::getFileDescription(AMFTransform& amft, std::string& desc)
     }
 }
 
-void AMFParser::Impl::checkLutPath(const char* lutPath)
+void AMFParser::Impl::getPath(std::string& path)
+{
+    path = path.substr(0, path.find_last_of("/")) + "/";
+}
+
+void AMFParser::Impl::checkLutPath(std::string& lutPath)
 {
     std::ifstream file(lutPath);
     if (file.good())
         return;
 
-    std::string error = std::string("Invalid LUT Path: ") + std::string(lutPath);
-    throwMessage(error);
+    if (lutPath.find("/") == 0)
+    {
+        throw std::runtime_error("File transform refers to path that does not exist: " + lutPath);
+    }
+    else
+    {
+        std::string prefix = m_xmlFilePath.substr(0, m_xmlFilePath.find_last_of("/"));
+        std::string abs_path = prefix + "/" + lutPath;
+        std::ifstream file2(abs_path);
+        if (file2.good())
+        {
+            lutPath = abs_path;
+        }
+        else
+        {
+            throw std::runtime_error("File transform refers to path that does not exist: " + lutPath);
+        }
+    }
 }
 
 void AMFParser::Impl::determineClipColorSpace()
