@@ -1311,7 +1311,6 @@ void AMFParser::Impl::checkLutPath(std::string& lutPath)
         std::ifstream file2(abs_path);
         if (file2.good())
         {
-            lutPath = abs_path;
         }
         else
         {
