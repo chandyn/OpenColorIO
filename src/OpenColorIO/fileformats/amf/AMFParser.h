@@ -12,15 +12,8 @@ namespace OCIO_NAMESPACE
 class AMFParser
 {
 public:
-    explicit AMFParser() : m_impl(NULL) {};
-    virtual ~AMFParser()
-    {
-        if (m_impl == NULL)
-            return;
-
-        delete m_impl;
-        m_impl = NULL;
-    }
+    AMFParser();
+    ~AMFParser();
 
     ConstConfigRcPtr buildConfig(AMFInfoRcPtr amfInfoObject, const char* amfFilePath);
 

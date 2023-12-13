@@ -213,7 +213,7 @@ private:
     bool processLookTransform(AMFTransform& look, int index);
     void loadCdlWsTransform(AMFTransform& amft, bool isTo, TransformRcPtr& t);
     void extractThreeFloats(std::string str, double* arr);
-    bool mustApply(AMFTransform& amft, bool isLook);
+    bool mustApply(AMFTransform& amft);
     void getCCCId(AMFTransform& amft, std::string& cccId);
     LookRcPtr searchLookTransforms(std::string acesId);
 
@@ -973,7 +973,7 @@ ConstViewTransformRcPtr AMFParser::Impl::searchViewTransforms(std::string acesId
 
 bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
 {
-    auto wasApplied = !mustApply(look, "Look");
+    auto wasApplied = !mustApply(look);
 
     std::string lookName = "AMF Look " + std::to_string(index);
     if (wasApplied)
@@ -1224,7 +1224,7 @@ void AMFParser::Impl::extractThreeFloats(std::string str, double* arr)
     iss >> arr[0] >> arr[1] >> arr[2];
 }
 
-bool AMFParser::Impl::mustApply(AMFTransform& amft, bool isLook)
+bool AMFParser::Impl::mustApply(AMFTransform& amft)
 {
     for (auto it = amft.m_attributes.begin(); it != amft.m_attributes.end(); it++)
     {
@@ -1321,8 +1321,8 @@ void AMFParser::Impl::checkLutPath(std::string& lutPath)
 
 void AMFParser::Impl::determineClipColorSpace()
 {
-    bool mustApplyInput = mustApply(m_input, false);
-    bool mustApplyOutput = mustApply(m_output, false);
+    bool mustApplyInput = mustApply(m_input);
+    bool mustApplyOutput = mustApply(m_output);
     if (!mustApplyOutput)
     {
         m_amfInfoObject->clipColorSpaceName = m_amfConfig->getActiveDisplays();
@@ -1342,6 +1342,19 @@ void AMFParser::Impl::throwMessage(const std::string& error) const
     os << "Error is: " << error.c_str();
     os << ". At line (" << m_lineNumber << ")";
     throw Exception(os.str().c_str());
+}
+
+AMFParser::AMFParser() : m_impl(NULL)
+{
+}
+
+AMFParser::~AMFParser()
+{
+    if (m_impl == NULL)
+        return;
+
+    delete m_impl;
+    m_impl = NULL;
 }
 
 ConstConfigRcPtr AMFParser::buildConfig(AMFInfoRcPtr amfInfoObject, const char* amfFilePath)
