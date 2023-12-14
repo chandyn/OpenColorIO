@@ -206,7 +206,7 @@ private:
     void loadACESRefConfig();
     void initAMFConfig();
 
-    void processOutputTransformId(const char* transformId, TransformDirection tDirection);
+    void processOutputTransformId(const char* transformId, TransformDirection tDirection, std::string& csName);
     void addInactiveCS(const char* csName);
     ConstViewTransformRcPtr searchViewTransforms(std::string acesId);
 
@@ -609,7 +609,7 @@ void AMFParser::Impl::processInputTransform()
             {
                 if (0 == std::strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
                 {
-                    processOutputTransformId(it->second.c_str(), TRANSFORM_DIR_INVERSE);
+                    processOutputTransformId(it->second.c_str(), TRANSFORM_DIR_INVERSE, m_amfInfoObject->inputColorSpaceName);
                 }
                 else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_FILE))
                 {
@@ -674,7 +674,8 @@ void AMFParser::Impl::processOutputTransform()
     {
         if (0 == std::strcmp(elem.first.c_str(), AMF_TAG_TRANSFORMID))
         {
-            processOutputTransformId(elem.second.c_str(), TRANSFORM_DIR_FORWARD);
+            std::string ignore = "";
+            processOutputTransformId(elem.second.c_str(), TRANSFORM_DIR_FORWARD, ignore);
             return;
         }
         else if (0 == std::strcmp(elem.first.c_str(), AMF_TAG_FILE))
@@ -716,7 +717,8 @@ void AMFParser::Impl::processOutputTransform()
             {
                 if (0 == std::strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
                 {
-                    processOutputTransformId(it->second.c_str(), TRANSFORM_DIR_FORWARD);
+                    std::string ignore = "";
+                    processOutputTransformId(it->second.c_str(), TRANSFORM_DIR_FORWARD, ignore);
                 }
                 else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_FILE))
                 {
@@ -911,7 +913,7 @@ void AMFParser::Impl::initAMFConfig()
     m_amfConfig->addSearchPath(amfPath.c_str());
 }
 
-void AMFParser::Impl::processOutputTransformId(const char* transformId, TransformDirection tDirection)
+void AMFParser::Impl::processOutputTransformId(const char* transformId, TransformDirection tDirection, std::string& csName)
 {
     ConstColorSpaceRcPtr dcs = searchColorSpaces(transformId);
     ConstViewTransformRcPtr vt = searchViewTransforms(transformId);
@@ -942,6 +944,7 @@ void AMFParser::Impl::processOutputTransformId(const char* transformId, Transfor
             cs->addCategory("file-io");
 
             m_amfConfig->addColorSpace(cs);
+            csName = cs->getName();
         }
         else
         {
