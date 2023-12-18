@@ -4,6 +4,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <stack>
+#include <regex>
 
 #include "fileformats/amf/AMFParser.h"
 #include "expat.h"
@@ -296,6 +297,13 @@ ConstConfigRcPtr AMFParser::Impl::parse(AMFInfoRcPtr amfInfoObject, const char* 
     m_amfInfoObject->displayName = m_amfConfig->getActiveDisplays();
     m_amfInfoObject->viewName = m_amfConfig->getActiveViews();
     determineClipColorSpace();
+
+    std::regex nonAlnum("[^0-9a-zA-Z_]");
+    std::string newName = std::regex_replace(m_clipName, nonAlnum, "");
+    std::string roleName = "amf_clip_" + newName;
+    m_amfConfig->setRole(roleName.c_str(), m_amfInfoObject->clipColorSpaceName.c_str());
+    
+    m_amfConfig->validate();
 
     return m_amfConfig;
 }
@@ -895,8 +903,8 @@ void AMFParser::Impl::initAMFConfig()
     m_amfConfig->setFileRules(rules);
 
     ColorSpaceTransformRcPtr cst = ColorSpaceTransform::Create();
-    cst->setSrc(ACES);
-    cst->setDst("$SHOT_LOOKS");
+    cst->setSrc("$SHOT_LOOKS");
+    cst->setDst(ACES);
     cst->setDirection(TRANSFORM_DIR_FORWARD);
     cst->setDataBypass(true);
     LookRcPtr look = Look::Create();
