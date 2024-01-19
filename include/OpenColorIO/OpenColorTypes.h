@@ -951,12 +951,12 @@ extern OCIOEXPORT const char * OCIO_BUILTIN_URI_PREFIX;
 
 struct AMFInfo
 {
-    std::string clipIdentifier;    // String appended to various pieces of the config to ensure the name is unique.
-    std::string clipColorSpaceName;    // Name of the color space for the media (clip) that the AMF describes.
-    std::string inputColorSpaceName;    // Name of the color space for the AMF Input Transform.
+    char* clipIdentifier;    // String appended to various pieces of the config to ensure the name is unique.
+    char* clipColorSpaceName;    // Name of the color space for the media (clip) that the AMF describes.
+    char* inputColorSpaceName;    // Name of the color space for the AMF Input Transform.
     int numLooksApplied;    // Number of AMF Look Transforms that were applied to the clip.
-    std::string displayName;    // Name of the OCIO display corresponding to the AMF Output Transform.
-    std::string viewName;    // Name of the OCIO view corresponding to the AMF Output Transform.
+    char* displayName;    // Name of the OCIO display corresponding to the AMF Output Transform.
+    char* viewName;    // Name of the OCIO view corresponding to the AMF Output Transform.
 };
 typedef OCIO_SHARED_PTR<const AMFInfo> ConstAMFInfoRcPtr;
 typedef OCIO_SHARED_PTR<AMFInfo> AMFInfoRcPtr;

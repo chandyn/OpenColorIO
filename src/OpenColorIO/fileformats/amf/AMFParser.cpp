@@ -9,13 +9,9 @@
 #include "fileformats/amf/AMFParser.h"
 #include "expat.h"
 
-#ifdef _WIN32
-#define STRCASECMP _strcmpi
-#else
-#include <strings.h>
-#include <cstring>
-#define STRCASECMP strcasecmp
-#endif
+#include <Platform.h>
+
+#define ARB_SPACE_LEN   63
 
 namespace OCIO_NAMESPACE
 {
@@ -54,6 +50,8 @@ static constexpr char AMF_TAG_POWER[] = "cdl:Power";
 static constexpr char AMF_TAG_SATNODE[] = "cdl:SatNode";
 static constexpr char AMF_TAG_ASCSAT[] = "cdl:ASC_SAT";
 static constexpr char AMF_TAG_SAT[] = "cdl:Saturation";
+
+static constexpr char AMF_TAG_PIPELINE[] = "aces:pipeline";
 
 // Table of mappings from all log camera color spaces in the current Studio config
 // to their linearized camera color space.
@@ -168,7 +166,8 @@ public:
         , m_isInsideInputTransform(false)
         , m_isInsideOutputTransform(false)
         , m_isInsideLookTransform(false)
-        , m_isInsideClipId(false) {};
+        , m_isInsideClipId(false)
+        , m_isInsidePipeline(false) {};
 
     ~Impl()
     {
@@ -188,12 +187,14 @@ private:
     static bool HandleOutputTransformStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts);
     static bool HandleLookTransformStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts);
     static bool HandleClipIdStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts);
+    static bool HandlePipelineStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts);
 
     static void EndElementHandler(void* userData, const XML_Char* name);
     static bool HandleInputTransformEndElement(AMFParser::Impl* pImpl, const XML_Char* name);
     static bool HandleOutputTransformEndElement(AMFParser::Impl* pImpl, const XML_Char* name);
     static bool HandleLookTransformEndElement(AMFParser::Impl* pImpl, const XML_Char* name);
     static bool HandleClipIdEndElement(AMFParser::Impl* pImpl, const XML_Char* name);
+    static bool HandlePipelineEndElement(AMFParser::Impl* pImpl, const XML_Char* name);
 
     static void CharacterDataHandler(void* userData, const XML_Char* s, int len);
 
@@ -207,7 +208,7 @@ private:
     void loadACESRefConfig();
     void initAMFConfig();
 
-    void processOutputTransformId(const char* transformId, TransformDirection tDirection, std::string& csName);
+    void processOutputTransformId(const char* transformId, TransformDirection tDirection, const char* csName=NULL);
     void addInactiveCS(const char* csName);
     ConstViewTransformRcPtr searchViewTransforms(std::string acesId);
 
@@ -239,7 +240,7 @@ private:
     AMFInputTransform m_input;
     AMFOutputTransform m_output;
     std::vector<AMFTransformRcPtr> m_look;
-    bool m_isInsideInputTransform, m_isInsideOutputTransform, m_isInsideLookTransform, m_isInsideClipId;
+    bool m_isInsideInputTransform, m_isInsideOutputTransform, m_isInsideLookTransform, m_isInsideClipId, m_isInsidePipeline;
     std::string m_currentElement, m_clipName;
 };
 
@@ -256,7 +257,7 @@ void AMFParser::Impl::reset()
     m_output.reset();
     for (auto& elem : m_look)
         elem.reset();
-    m_isInsideInputTransform = m_isInsideOutputTransform = m_isInsideLookTransform = m_isInsideClipId = false;
+    m_isInsideInputTransform = m_isInsideOutputTransform = m_isInsideLookTransform = m_isInsideClipId = m_isInsidePipeline = false;
     m_currentElement.clear();
     m_clipName.clear();
 }
@@ -293,15 +294,15 @@ ConstConfigRcPtr AMFParser::Impl::parse(AMFInfoRcPtr amfInfoObject, const char* 
     processOutputTransform();
     processLookTransforms();
 
-    m_amfInfoObject->clipIdentifier = m_clipName;
-    m_amfInfoObject->displayName = m_amfConfig->getActiveDisplays();
-    m_amfInfoObject->viewName = m_amfConfig->getActiveViews();
+    strncpy_s(m_amfInfoObject->clipIdentifier, ARB_SPACE_LEN, m_clipName.c_str(), ARB_SPACE_LEN);
+    strncpy_s(m_amfInfoObject->displayName, ARB_SPACE_LEN, m_amfConfig->getActiveDisplays(), ARB_SPACE_LEN);
+    strncpy_s(m_amfInfoObject->viewName, ARB_SPACE_LEN, m_amfConfig->getActiveViews(), ARB_SPACE_LEN);
     determineClipColorSpace();
 
     std::regex nonAlnum("[^0-9a-zA-Z_]");
     std::string newName = std::regex_replace(m_clipName, nonAlnum, "");
     std::string roleName = "amf_clip_" + newName;
-    m_amfConfig->setRole(roleName.c_str(), m_amfInfoObject->clipColorSpaceName.c_str());
+    m_amfConfig->setRole(roleName.c_str(), m_amfInfoObject->clipColorSpaceName);
     
     m_amfConfig->validate();
 
@@ -326,11 +327,16 @@ void AMFParser::Impl::StartElementHandler(void* userData, const XML_Char* name, 
     AMFParser::Impl* pImpl = (AMFParser::Impl*)userData;
     if (IsValidElement(pImpl, name))
     {
-        if (HandleInputTransformStartElement(pImpl, name, atts) ||
-            HandleOutputTransformStartElement(pImpl, name, atts) ||
-            HandleLookTransformStartElement(pImpl, name, atts) ||
-            HandleClipIdStartElement(pImpl, name, atts))
+        if (HandleClipIdStartElement(pImpl, name, atts))
         {
+        }
+        else if (HandlePipelineStartElement(pImpl, name, atts))
+        {
+            if (HandleInputTransformStartElement(pImpl, name, atts) ||
+                HandleOutputTransformStartElement(pImpl, name, atts) ||
+                HandleLookTransformStartElement(pImpl, name, atts))
+            {
+            }
         }
     }
 }
@@ -434,16 +440,36 @@ bool AMFParser::Impl::HandleClipIdStartElement(AMFParser::Impl* pImpl, const XML
     return false;
 }
 
+bool AMFParser::Impl::HandlePipelineStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts)
+{
+    if ((0 == std::strcmp(name, AMF_TAG_PIPELINE)))
+    {
+        pImpl->m_isInsidePipeline = true;
+        return true;
+    }
+    else if (pImpl->m_isInsidePipeline)
+    {
+        return true;
+    }
+
+    return false;
+}
+
 void AMFParser::Impl::EndElementHandler(void* userData, const XML_Char* name)
 {
     AMFParser::Impl* pImpl = (AMFParser::Impl*)userData;
     if (IsValidElement(pImpl, name))
     {
-        if (HandleInputTransformEndElement(pImpl, name) ||
-            HandleOutputTransformEndElement(pImpl, name) ||
-            HandleLookTransformEndElement(pImpl, name) ||
-            HandleClipIdEndElement(pImpl, name))
+        if (HandleClipIdEndElement(pImpl, name))
         {
+        }
+        else if (HandlePipelineEndElement(pImpl, name))
+        {
+            if (HandleInputTransformEndElement(pImpl, name) ||
+                HandleOutputTransformEndElement(pImpl, name) ||
+                HandleLookTransformEndElement(pImpl, name))
+            {
+            }
         }
     }
 }
@@ -517,6 +543,22 @@ bool AMFParser::Impl::HandleClipIdEndElement(AMFParser::Impl* pImpl, const XML_C
 
     return false;
 }
+
+bool AMFParser::Impl::HandlePipelineEndElement(AMFParser::Impl* pImpl, const XML_Char* name)
+{
+    if ((0 == std::strcmp(name, AMF_TAG_PIPELINE)))
+    {
+        pImpl->m_isInsidePipeline = false;
+        return true;
+    }
+    else if (pImpl->m_isInsidePipeline)
+    {
+        return true;
+    }
+
+    return false;
+}
+
 void AMFParser::Impl::CharacterDataHandler(void* userData, const XML_Char* s, int len)
 {
     AMFParser::Impl* pImpl = (AMFParser::Impl*)userData;
@@ -576,7 +618,7 @@ void AMFParser::Impl::processInputTransform()
             if (cs != NULL)
             {
                 m_amfConfig->addColorSpace(cs);
-                m_amfInfoObject->inputColorSpaceName = cs->getName();
+                strncpy_s(m_amfInfoObject->inputColorSpaceName, ARB_SPACE_LEN, cs->getName(), ARB_SPACE_LEN);
 
                 auto it = CAMERA_MAPPING.find(cs->getName());
                 if (it != CAMERA_MAPPING.end())
@@ -604,7 +646,7 @@ void AMFParser::Impl::processInputTransform()
             cs->setTransform(ft, COLORSPACE_DIR_TO_REFERENCE);
 
             m_amfConfig->addColorSpace(cs);
-            m_amfInfoObject->inputColorSpaceName = cs->getName();
+            strncpy_s(m_amfInfoObject->inputColorSpaceName, ARB_SPACE_LEN, cs->getName(), ARB_SPACE_LEN);
         }
     }
 
@@ -669,11 +711,14 @@ void AMFParser::Impl::processInputTransform()
                     m_amfConfig->setActiveDisplays(dispName.c_str());
                     m_amfConfig->setActiveViews(viewName.c_str());
                     m_amfConfig->addColorSpace(cs);
-                    m_amfInfoObject->inputColorSpaceName = cs->getName();
+                    strncpy_s(m_amfInfoObject->inputColorSpaceName, ARB_SPACE_LEN, cs->getName(), ARB_SPACE_LEN);
                 }
             }
         }
     }
+
+    if (0 == strlen(m_amfInfoObject->inputColorSpaceName))
+        strncpy_s(m_amfInfoObject->inputColorSpaceName, ARB_SPACE_LEN, ACES, ARB_SPACE_LEN);
 }
 
 void AMFParser::Impl::processOutputTransform()
@@ -682,8 +727,7 @@ void AMFParser::Impl::processOutputTransform()
     {
         if (0 == std::strcmp(elem.first.c_str(), AMF_TAG_TRANSFORMID))
         {
-            std::string ignore = "";
-            processOutputTransformId(elem.second.c_str(), TRANSFORM_DIR_FORWARD, ignore);
+            processOutputTransformId(elem.second.c_str(), TRANSFORM_DIR_FORWARD);
             return;
         }
         else if (0 == std::strcmp(elem.first.c_str(), AMF_TAG_FILE))
@@ -725,8 +769,7 @@ void AMFParser::Impl::processOutputTransform()
             {
                 if (0 == std::strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
                 {
-                    std::string ignore = "";
-                    processOutputTransformId(it->second.c_str(), TRANSFORM_DIR_FORWARD, ignore);
+                    processOutputTransformId(it->second.c_str(), TRANSFORM_DIR_FORWARD);
                 }
                 else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_FILE))
                 {
@@ -921,7 +964,7 @@ void AMFParser::Impl::initAMFConfig()
     m_amfConfig->addSearchPath(amfPath.c_str());
 }
 
-void AMFParser::Impl::processOutputTransformId(const char* transformId, TransformDirection tDirection, std::string& csName)
+void AMFParser::Impl::processOutputTransformId(const char* transformId, TransformDirection tDirection, const char* csName)
 {
     ConstColorSpaceRcPtr dcs = searchColorSpaces(transformId);
     ConstViewTransformRcPtr vt = searchViewTransforms(transformId);
@@ -932,7 +975,13 @@ void AMFParser::Impl::processOutputTransformId(const char* transformId, Transfor
         m_amfConfig->addViewTransform(vt);
 
         m_amfConfig->addSharedView(vt->getName(), vt->getName(), "<USE_DISPLAY_NAME>", ACES_LOOK_NAME, "", "");
-        m_amfConfig->addDisplaySharedView(dcs->getName(), vt->getName());
+        int numViews = m_amfConfig->getNumViews(dcs->getName());
+        bool bViewExists = false;
+        for (int i = 0; i < numViews; i++)
+            if (0 == strcmp(m_amfConfig->getView(dcs->getName(), i), vt->getName()))
+                bViewExists = true;
+        if (!bViewExists)
+            m_amfConfig->addDisplaySharedView(dcs->getName(), vt->getName());
 
         if (tDirection == TRANSFORM_DIR_INVERSE)
         {
@@ -1241,7 +1290,7 @@ bool AMFParser::Impl::mustApply(AMFTransform& amft)
     {
         if (0 == std::strcmp(it->first.c_str(), "applied"))
         {
-            if (0 == STRCASECMP(it->second.c_str(), "true"))
+            if (0 == Platform::Strcasecmp(it->second.c_str(), "true"))
             {
                 return false;
             }
@@ -1336,15 +1385,15 @@ void AMFParser::Impl::determineClipColorSpace()
     bool mustApplyOutput = mustApply(m_output);
     if (!mustApplyOutput)
     {
-        m_amfInfoObject->clipColorSpaceName = m_amfConfig->getActiveDisplays();
+        strncpy_s(m_amfInfoObject->clipColorSpaceName, ARB_SPACE_LEN, m_amfConfig->getActiveDisplays(), ARB_SPACE_LEN);
         return;
     }
     else if (mustApplyInput)
     {
-        m_amfInfoObject->clipColorSpaceName = m_amfInfoObject->inputColorSpaceName;
+        strncpy_s(m_amfInfoObject->clipColorSpaceName, ARB_SPACE_LEN, m_amfInfoObject->inputColorSpaceName, ARB_SPACE_LEN);
         return;
     }
-    m_amfInfoObject->clipColorSpaceName = ACES;
+    strncpy_s(m_amfInfoObject->clipColorSpaceName, ARB_SPACE_LEN, ACES, ARB_SPACE_LEN);
 }
 
 void AMFParser::Impl::throwMessage(const std::string& error) const
