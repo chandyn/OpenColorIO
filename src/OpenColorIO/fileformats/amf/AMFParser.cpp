@@ -190,7 +190,7 @@ private:
     static bool HandleOutputTransformStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts);
     static bool HandleLookTransformStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts);
     static bool HandleClipIdStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts);
-    static bool HandlePipelineStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts);
+    static bool HandlePipelineStartElement(AMFParser::Impl* pImpl, const XML_Char* name);
 
     static void EndElementHandler(void* userData, const XML_Char* name);
     static bool HandleInputTransformEndElement(AMFParser::Impl* pImpl, const XML_Char* name);
@@ -342,7 +342,7 @@ void AMFParser::Impl::StartElementHandler(void* userData, const XML_Char* name, 
         if (HandleClipIdStartElement(pImpl, name, atts))
         {
         }
-        else if (HandlePipelineStartElement(pImpl, name, atts))
+        else if (HandlePipelineStartElement(pImpl, name))
         {
             if (HandleInputTransformStartElement(pImpl, name, atts) ||
                 HandleOutputTransformStartElement(pImpl, name, atts) ||
@@ -452,7 +452,7 @@ bool AMFParser::Impl::HandleClipIdStartElement(AMFParser::Impl* pImpl, const XML
     return false;
 }
 
-bool AMFParser::Impl::HandlePipelineStartElement(AMFParser::Impl* pImpl, const XML_Char* name, const XML_Char** atts)
+bool AMFParser::Impl::HandlePipelineStartElement(AMFParser::Impl* pImpl, const XML_Char* name)
 {
     if ((0 == std::strcmp(name, AMF_TAG_PIPELINE)))
     {
