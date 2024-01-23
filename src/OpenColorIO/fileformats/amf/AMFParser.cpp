@@ -309,7 +309,7 @@ ConstConfigRcPtr AMFParser::Impl::parse(AMFInfoRcPtr amfInfoObject, const char* 
     int numRoles = m_amfConfig->getNumRoles();
     for (int i = 0; i < numRoles; i++)
     {
-        if (0 == std::strcmp(m_amfConfig->getRoleName(i), roleName.c_str()))
+        if (0 == Platform::Strcasecmp(m_amfConfig->getRoleName(i), roleName.c_str()))
         {
             m_amfInfoObject->clipIdentifier = m_amfConfig->getRoleName(i);
             break;
@@ -1428,7 +1428,7 @@ void AMFParser::Impl::determineClipColorSpace()
     if (cs != NULL)
     {
         m_amfConfig->addColorSpace(cs);
-        m_amfInfoObject->inputColorSpaceName = m_amfConfig->getColorSpace(cs->getName())->getName();
+        m_amfInfoObject->clipColorSpaceName = m_amfInfoObject->inputColorSpaceName = m_amfConfig->getColorSpace(cs->getName())->getName();
 
         auto it = CAMERA_MAPPING.find(cs->getName());
         if (it != CAMERA_MAPPING.end())
