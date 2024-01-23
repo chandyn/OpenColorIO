@@ -11,8 +11,6 @@
 
 #include <Platform.h>
 
-#define ARB_SPACE_LEN   63
-
 namespace OCIO_NAMESPACE
 {
 
@@ -150,6 +148,11 @@ private:
             m_isInverse = false;
         }
 
+        bool empty()
+        {
+            return m_attributes.empty() && m_tldElements.empty() && m_subElements.empty();
+        }
+
         bool m_isInverse;
     };
 
@@ -208,7 +211,7 @@ private:
     void loadACESRefConfig();
     void initAMFConfig();
 
-    void processOutputTransformId(const char* transformId, TransformDirection tDirection, const char* csName=NULL);
+    void processOutputTransformId(const char* transformId, TransformDirection tDirection);
     void addInactiveCS(const char* csName);
     ConstViewTransformRcPtr searchViewTransforms(std::string acesId);
 
@@ -294,15 +297,24 @@ ConstConfigRcPtr AMFParser::Impl::parse(AMFInfoRcPtr amfInfoObject, const char* 
     processOutputTransform();
     processLookTransforms();
 
-    strncpy_s(m_amfInfoObject->clipIdentifier, ARB_SPACE_LEN, m_clipName.c_str(), ARB_SPACE_LEN);
-    strncpy_s(m_amfInfoObject->displayName, ARB_SPACE_LEN, m_amfConfig->getActiveDisplays(), ARB_SPACE_LEN);
-    strncpy_s(m_amfInfoObject->viewName, ARB_SPACE_LEN, m_amfConfig->getActiveViews(), ARB_SPACE_LEN);
+    m_amfInfoObject->displayName = m_amfConfig->getDisplay(0);
+    m_amfInfoObject->viewName = m_amfConfig->getView(m_amfInfoObject->displayName, 0);
     determineClipColorSpace();
 
     std::regex nonAlnum("[^0-9a-zA-Z_]");
     std::string newName = std::regex_replace(m_clipName, nonAlnum, "");
     std::string roleName = "amf_clip_" + newName;
     m_amfConfig->setRole(roleName.c_str(), m_amfInfoObject->clipColorSpaceName);
+
+    int numRoles = m_amfConfig->getNumRoles();
+    for (int i = 0; i < numRoles; i++)
+    {
+        if (0 == std::strcmp(m_amfConfig->getRoleName(i), roleName.c_str()))
+        {
+            m_amfInfoObject->clipIdentifier = m_amfConfig->getRoleName(i);
+            break;
+        }
+    }
     
     m_amfConfig->validate();
 
@@ -618,7 +630,7 @@ void AMFParser::Impl::processInputTransform()
             if (cs != NULL)
             {
                 m_amfConfig->addColorSpace(cs);
-                strncpy_s(m_amfInfoObject->inputColorSpaceName, ARB_SPACE_LEN, cs->getName(), ARB_SPACE_LEN);
+                m_amfInfoObject->inputColorSpaceName = m_amfConfig->getColorSpace(cs->getName())->getName();
 
                 auto it = CAMERA_MAPPING.find(cs->getName());
                 if (it != CAMERA_MAPPING.end())
@@ -646,7 +658,7 @@ void AMFParser::Impl::processInputTransform()
             cs->setTransform(ft, COLORSPACE_DIR_TO_REFERENCE);
 
             m_amfConfig->addColorSpace(cs);
-            strncpy_s(m_amfInfoObject->inputColorSpaceName, ARB_SPACE_LEN, cs->getName(), ARB_SPACE_LEN);
+            m_amfInfoObject->inputColorSpaceName = m_amfConfig->getColorSpace(cs->getName())->getName();
         }
     }
 
@@ -659,7 +671,7 @@ void AMFParser::Impl::processInputTransform()
             {
                 if (0 == std::strcmp(it->first.c_str(), AMF_TAG_TRANSFORMID))
                 {
-                    processOutputTransformId(it->second.c_str(), TRANSFORM_DIR_INVERSE, m_amfInfoObject->inputColorSpaceName);
+                    processOutputTransformId(it->second.c_str(), TRANSFORM_DIR_INVERSE);
                 }
                 else if (0 == std::strcmp(it->first.c_str(), AMF_TAG_FILE))
                 {
@@ -711,14 +723,32 @@ void AMFParser::Impl::processInputTransform()
                     m_amfConfig->setActiveDisplays(dispName.c_str());
                     m_amfConfig->setActiveViews(viewName.c_str());
                     m_amfConfig->addColorSpace(cs);
-                    strncpy_s(m_amfInfoObject->inputColorSpaceName, ARB_SPACE_LEN, cs->getName(), ARB_SPACE_LEN);
+                    m_amfInfoObject->inputColorSpaceName = m_amfConfig->getColorSpace(cs->getName())->getName();
                 }
             }
         }
     }
 
-    if (0 == strlen(m_amfInfoObject->inputColorSpaceName))
-        strncpy_s(m_amfInfoObject->inputColorSpaceName, ARB_SPACE_LEN, ACES, ARB_SPACE_LEN);
+    if (m_input.empty())
+    {
+        ConstColorSpaceRcPtr cs = searchColorSpaces(ACES);
+        if (cs != NULL)
+        {
+            m_amfConfig->addColorSpace(cs);
+            m_amfInfoObject->inputColorSpaceName = m_amfConfig->getColorSpace(cs->getName())->getName();
+
+            auto it = CAMERA_MAPPING.find(cs->getName());
+            if (it != CAMERA_MAPPING.end())
+            {
+                ConstColorSpaceRcPtr lin_cs = m_refConfig->getColorSpace(it->second.c_str());
+                m_amfConfig->addColorSpace(lin_cs);
+            }
+        }
+    }
+    else if ((NULL == m_amfInfoObject->inputColorSpaceName) || (0 == strlen(m_amfInfoObject->inputColorSpaceName)))
+    {
+        throwMessage("Input transform not found.");
+    }
 }
 
 void AMFParser::Impl::processOutputTransform()
@@ -964,7 +994,7 @@ void AMFParser::Impl::initAMFConfig()
     m_amfConfig->addSearchPath(amfPath.c_str());
 }
 
-void AMFParser::Impl::processOutputTransformId(const char* transformId, TransformDirection tDirection, const char* csName)
+void AMFParser::Impl::processOutputTransformId(const char* transformId, TransformDirection tDirection)
 {
     ConstColorSpaceRcPtr dcs = searchColorSpaces(transformId);
     ConstViewTransformRcPtr vt = searchViewTransforms(transformId);
@@ -1001,7 +1031,7 @@ void AMFParser::Impl::processOutputTransformId(const char* transformId, Transfor
             cs->addCategory("file-io");
 
             m_amfConfig->addColorSpace(cs);
-            csName = cs->getName();
+            m_amfInfoObject->inputColorSpaceName = m_amfConfig->getColorSpace(cs->getName())->getName();
         }
         else
         {
@@ -1385,15 +1415,28 @@ void AMFParser::Impl::determineClipColorSpace()
     bool mustApplyOutput = mustApply(m_output);
     if (!mustApplyOutput)
     {
-        strncpy_s(m_amfInfoObject->clipColorSpaceName, ARB_SPACE_LEN, m_amfConfig->getActiveDisplays(), ARB_SPACE_LEN);
+        m_amfInfoObject->clipColorSpaceName = m_amfConfig->getDisplay(0);
         return;
     }
     else if (mustApplyInput)
     {
-        strncpy_s(m_amfInfoObject->clipColorSpaceName, ARB_SPACE_LEN, m_amfInfoObject->inputColorSpaceName, ARB_SPACE_LEN);
+        m_amfInfoObject->clipColorSpaceName = m_amfInfoObject->inputColorSpaceName;
         return;
     }
-    strncpy_s(m_amfInfoObject->clipColorSpaceName, ARB_SPACE_LEN, ACES, ARB_SPACE_LEN);
+
+    ConstColorSpaceRcPtr cs = searchColorSpaces(ACES);
+    if (cs != NULL)
+    {
+        m_amfConfig->addColorSpace(cs);
+        m_amfInfoObject->inputColorSpaceName = m_amfConfig->getColorSpace(cs->getName())->getName();
+
+        auto it = CAMERA_MAPPING.find(cs->getName());
+        if (it != CAMERA_MAPPING.end())
+        {
+            ConstColorSpaceRcPtr lin_cs = m_refConfig->getColorSpace(it->second.c_str());
+            m_amfConfig->addColorSpace(lin_cs);
+        }
+    }
 }
 
 void AMFParser::Impl::throwMessage(const std::string& error) const
