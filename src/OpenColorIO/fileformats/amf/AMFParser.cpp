@@ -1009,7 +1009,7 @@ void AMFParser::Impl::processOutputTransformId(const char* transformId, Transfor
         int numViews = m_amfConfig->getNumViews(dcs->getName());
         bool bViewExists = false;
         for (int i = 0; i < numViews; i++)
-            if (0 == strcmp(m_amfConfig->getView(dcs->getName(), i), vt->getName()))
+            if (0 == Platform::Strcasecmp(m_amfConfig->getView(dcs->getName(), i), vt->getName()))
                 bViewExists = true;
         if (!bViewExists)
             m_amfConfig->addDisplaySharedView(dcs->getName(), vt->getName());
