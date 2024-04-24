@@ -15,7 +15,7 @@ public:
     AMFParser();
     ~AMFParser();
 
-    ConstConfigRcPtr buildConfig(AMFInfoRcPtr amfInfoObject, const char* amfFilePath);
+    ConstConfigRcPtr buildConfig(AMFInfoRcPtr amfInfoObject, const char* amfFilePath, const char* configFilePath = NULL);
 
 private:
     class Impl;

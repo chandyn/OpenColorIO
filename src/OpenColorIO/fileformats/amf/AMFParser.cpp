@@ -179,7 +179,7 @@ public:
         XML_ParserFree(m_parser);
     }
 
-    ConstConfigRcPtr parse(AMFInfoRcPtr amfInfoObject, const char* amfFilePath);
+    ConstConfigRcPtr parse(AMFInfoRcPtr amfInfoObject, const char* amfFilePath, const char* configFilePath = NULL);
 
 private:
     void reset();
@@ -209,7 +209,7 @@ private:
     void processLookTransforms();
     void processClipId();
 
-    void loadACESRefConfig();
+    void loadACESRefConfig(const char* configFilePath = NULL);
     void initAMFConfig();
 
     void processOutputTransformId(const char* transformId, TransformDirection tDirection);
@@ -266,7 +266,7 @@ void AMFParser::Impl::reset()
     m_clipName.clear();
 }
 
-ConstConfigRcPtr AMFParser::Impl::parse(AMFInfoRcPtr amfInfoObject, const char* amfFilePath)
+ConstConfigRcPtr AMFParser::Impl::parse(AMFInfoRcPtr amfInfoObject, const char* amfFilePath, const char* configFilePath)
 {
     reset();
 
@@ -274,7 +274,7 @@ ConstConfigRcPtr AMFParser::Impl::parse(AMFInfoRcPtr amfInfoObject, const char* 
     m_xmlStream.open(m_xmlFilePath, std::ios_base::in);
     m_amfInfoObject = amfInfoObject;
 
-    loadACESRefConfig();
+    loadACESRefConfig(configFilePath);
 
     initAMFConfig();
 
@@ -933,13 +933,13 @@ void AMFParser::Impl::processClipId()
         m_clipName = "AMF Clip Name";
 }
 
-void AMFParser::Impl::loadACESRefConfig()
+void AMFParser::Impl::loadACESRefConfig(const char* configFilePath)
 {
     //TODO: need to find a way to remove the hard coding for 2.3 and 2.4 as this is not future proof
     std::string ver = GetVersion();
     if (ver.find("2.3") != std::string::npos || ver.find("2.4") != std::string::npos)
     {
-        m_refConfig = Config::CreateFromBuiltinConfig("studio-config-v2.1.0_aces-v1.3_ocio-v2.3");
+        m_refConfig = configFilePath == NULL ? Config::CreateFromBuiltinConfig("studio-config-v2.1.0_aces-v1.3_ocio-v2.3") : Config::CreateFromFile(configFilePath);
         return;
     }
     throwMessage("Requires OCIO library version 2.3.0 or higher.");
@@ -1064,7 +1064,7 @@ ConstViewTransformRcPtr AMFParser::Impl::searchViewTransforms(std::string acesId
 
 bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
 {
-    auto wasApplied = !mustApply(look);
+    auto wasApplied = mustApply(look);
 
     std::string lookName = "AMF Look " + std::to_string(index);
     if (wasApplied)
@@ -1461,17 +1461,17 @@ AMFParser::~AMFParser()
     m_impl = NULL;
 }
 
-ConstConfigRcPtr AMFParser::buildConfig(AMFInfoRcPtr amfInfoObject, const char* amfFilePath)
+ConstConfigRcPtr AMFParser::buildConfig(AMFInfoRcPtr amfInfoObject, const char* amfFilePath, const char* configFilePath)
 {
     if (m_impl == NULL)
         m_impl = new Impl();
-    return m_impl->parse(amfInfoObject, amfFilePath);
+    return m_impl->parse(amfInfoObject, amfFilePath, configFilePath);
 }
 
-OCIOEXPORT ConstConfigRcPtr CreateFromAMF(AMFInfoRcPtr amfInfoObject, const char* amfFilePath)
+OCIOEXPORT ConstConfigRcPtr CreateFromAMF(AMFInfoRcPtr amfInfoObject, const char* amfFilePath, const char* configFilePath)
 {
     AMFParser p;
-    return p.buildConfig(amfInfoObject, amfFilePath);
+    return p.buildConfig(amfInfoObject, amfFilePath, configFilePath);
 }
 
 } // namespace OCIO_NAMESPACE

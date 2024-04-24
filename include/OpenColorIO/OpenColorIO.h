@@ -3894,7 +3894,7 @@ public:
  *
  * \throw Exception if there is a problem interpreting the AMF file.
  */
-extern OCIOEXPORT ConstConfigRcPtr CreateFromAMF(AMFInfoRcPtr amfInfoObject, const char* amfFilePath);
+extern OCIOEXPORT ConstConfigRcPtr CreateFromAMF(AMFInfoRcPtr amfInfoObject, const char* amfFilePath, const char* configFilePath = NULL);
 
 } // namespace OCIO_NAMESPACE
 
