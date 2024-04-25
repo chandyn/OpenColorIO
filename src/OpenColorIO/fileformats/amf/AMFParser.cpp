@@ -1082,10 +1082,6 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
     if (wasApplied)
         lookName += " (Applied)";
     lookName += " -- " + m_clipName;
-    if (desc.empty())
-        lookName += " -- No description";
-    else
-        lookName += " -- " + desc;
 
     for (auto it = look.m_subElements.begin(); it != look.m_subElements.end(); it++)
     {
@@ -1095,6 +1091,7 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
             if (lk != NULL)
             {
                 lk->setName(lookName.c_str());
+                lk->setDescription(desc.c_str());
                 m_amfConfig->addLook(lk);
                 return wasApplied;
             }
@@ -1268,7 +1265,7 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
         lk->setName(lookName.c_str());
         lk->setProcessSpace(ACES);
         lk->setTransform(gt);
-        lk->setDescription("ASC CDL");
+        lk->setDescription(std::string("ASC CDL -- " + desc).c_str());
         m_amfConfig->addLook(lk);
         return wasApplied;
     }
@@ -1406,7 +1403,7 @@ void AMFParser::Impl::checkLutPath(std::string& lutPath)
 
     if (lutPath.find("/") == 0)
     {
-        throw std::runtime_error("File transform refers to path that does not exist: " + lutPath);
+        throwMessage("File transform refers to path that does not exist: " + lutPath);
     }
     else
     {
@@ -1418,7 +1415,7 @@ void AMFParser::Impl::checkLutPath(std::string& lutPath)
         }
         else
         {
-            throw std::runtime_error("File transform refers to path that does not exist: " + lutPath);
+            throwMessage("File transform refers to path that does not exist: " + lutPath);
         }
     }
 }
