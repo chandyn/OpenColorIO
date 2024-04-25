@@ -425,6 +425,15 @@ bool AMFParser::Impl::HandleLookTransformStartElement(AMFParser::Impl* pImpl, co
     else if (pImpl->m_isInsideLookTransform)
     {
         pImpl->m_currentElement = name;
+        if ((0 == Platform::Strcasecmp(name, AMF_TAG_CDLCCR)))
+        {
+            for (int i = 0; atts[i]; i += 2)
+            {
+                const char* attrName = atts[i];
+                const char* attrValue = atts[i + 1];
+                pImpl->m_look.back()->addSubElement(AMF_TAG_CDLCCR, attrValue);
+            }
+        }
         return true;
     }
 
@@ -1066,10 +1075,17 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
 {
     auto wasApplied = mustApply(look);
 
+    std::string desc;
+    getFileDescription(look, desc);
+
     std::string lookName = "AMF Look " + std::to_string(index);
     if (wasApplied)
         lookName += " (Applied)";
     lookName += " -- " + m_clipName;
+    if (desc.empty())
+        lookName += " -- No description";
+    else
+        lookName += " -- " + desc;
 
     for (auto it = look.m_subElements.begin(); it != look.m_subElements.end(); it++)
     {
@@ -1085,9 +1101,6 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
         }
         else if (0 == Platform::Strcasecmp(it->first.c_str(), AMF_TAG_FILE))
         {
-            std::string desc;
-            getFileDescription(look, desc);
-
             std::string cccid;
             getCCCId(look, cccid);
             if (!cccid.empty())
