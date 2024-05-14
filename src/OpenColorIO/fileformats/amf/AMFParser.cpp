@@ -28,6 +28,7 @@ static constexpr char AMF_TAG_DESC[] = "aces:description";
 static constexpr char AMF_TAG_INPUT_TRANSFORM[] = "aces:inputTransform";
 static constexpr char AMF_TAG_OUTPUT_TRANSFORM[] = "aces:outputTransform";
 static constexpr char AMF_TAG_LOOK_TRANSFORM[] = "aces:lookTransform";
+static constexpr char AMF_TAG_WORKING_LOCATION[] = "aces:workingLocation";
 
 static constexpr char AMF_TAG_TRANSFORMID[] = "aces:transformId";
 static constexpr char AMF_TAG_FILE[] = "aces:file";
@@ -51,6 +52,10 @@ static constexpr char AMF_TAG_ASCSAT[] = "cdl:ASC_SAT";
 static constexpr char AMF_TAG_SAT[] = "cdl:Saturation";
 
 static constexpr char AMF_TAG_PIPELINE[] = "aces:pipeline";
+
+static constexpr char AMF_NO_WORKING_LOCATION[] = "";
+static constexpr char AMF_PRE_WORKING_LOCATION[] = "Pre-working-location";
+static constexpr char AMF_POST_WORKING_LOCATION[] = "Post-working-location";
 
 // Table of mappings from all log camera color spaces in the current Studio config
 // to their linearized camera color space.
@@ -105,6 +110,11 @@ private:
             m_attributes.push_back(std::make_pair(name, value));
         }
 
+        bool empty()
+        {
+            return m_attributes.empty() && m_subElements.empty();
+        }
+
         std::vector<std::pair<std::string, std::string>> m_subElements;
         std::vector<std::pair<std::string, std::string>> m_attributes;
     };
@@ -132,6 +142,11 @@ private:
         void addTldElement(const std::string& name, const std::string& value)
         {
             m_tldElements.push_back(std::make_pair(name, value));
+        }
+
+        bool empty()
+        {
+            return m_attributes.empty() && m_tldElements.empty() && m_subElements.empty();
         }
 
         std::stack<std::string> m_tldTemp;
@@ -171,7 +186,8 @@ public:
         , m_isInsideOutputTransform(false)
         , m_isInsideLookTransform(false)
         , m_isInsideClipId(false)
-        , m_isInsidePipeline(false) {};
+        , m_isInsidePipeline(false)
+        , m_numLooksBeforeWorkingLocation(-1) {};
 
     ~Impl()
     {
@@ -216,7 +232,7 @@ private:
     void addInactiveCS(const char* csName);
     ConstViewTransformRcPtr searchViewTransforms(std::string acesId);
 
-    bool processLookTransform(AMFTransform& look, int index);
+    bool processLookTransform(AMFTransform& look, int index, std::string workingLocation);
     void loadCdlWsTransform(AMFTransform& amft, bool isTo, TransformRcPtr& t);
     void extractThreeFloats(std::string str, double* arr);
     bool mustApply(AMFTransform& amft);
@@ -228,6 +244,7 @@ private:
     void getPath(std::string& path);
     void checkLutPath(std::string& lutPath);
     void determineClipColorSpace();
+    void handleWorkingLocation();
 
     void throwMessage(const std::string& error) const;
 
@@ -246,6 +263,7 @@ private:
     std::vector<AMFTransformRcPtr> m_look;
     bool m_isInsideInputTransform, m_isInsideOutputTransform, m_isInsideLookTransform, m_isInsideClipId, m_isInsidePipeline;
     std::string m_currentElement, m_clipName;
+    size_t m_numLooksBeforeWorkingLocation;
 };
 
 void AMFParser::Impl::reset()
@@ -264,6 +282,7 @@ void AMFParser::Impl::reset()
     m_isInsideInputTransform = m_isInsideOutputTransform = m_isInsideLookTransform = m_isInsideClipId = m_isInsidePipeline = false;
     m_currentElement.clear();
     m_clipName.clear();
+    m_numLooksBeforeWorkingLocation = -1;
 }
 
 ConstConfigRcPtr AMFParser::Impl::parse(AMFInfoRcPtr amfInfoObject, const char* amfFilePath, const char* configFilePath)
@@ -295,8 +314,10 @@ ConstConfigRcPtr AMFParser::Impl::parse(AMFInfoRcPtr amfInfoObject, const char* 
 
     processClipId();
     processInputTransform();
-    processOutputTransform();
     processLookTransforms();
+    processOutputTransform();
+
+    handleWorkingLocation();
 
     m_amfInfoObject->displayName = m_amfConfig->getDisplay(0);
     m_amfInfoObject->viewName = m_amfConfig->getView(m_amfInfoObject->displayName, 0);
@@ -345,9 +366,13 @@ void AMFParser::Impl::StartElementHandler(void* userData, const XML_Char* name, 
         }
         else if (HandlePipelineStartElement(pImpl, name))
         {
-            if (HandleInputTransformStartElement(pImpl, name, atts) ||
-                HandleOutputTransformStartElement(pImpl, name, atts) ||
-                HandleLookTransformStartElement(pImpl, name, atts))
+            if (0 == Platform::Strcasecmp(name, AMF_TAG_WORKING_LOCATION))
+            {
+                pImpl->m_numLooksBeforeWorkingLocation = pImpl->m_look.size();
+            }
+            else if (HandleInputTransformStartElement(pImpl, name, atts) ||
+                        HandleOutputTransformStartElement(pImpl, name, atts) ||
+                        HandleLookTransformStartElement(pImpl, name, atts))
             {
             }
         }
@@ -763,6 +788,16 @@ void AMFParser::Impl::processInputTransform()
 
 void AMFParser::Impl::processOutputTransform()
 {
+    //handle missing outputTransform
+    if (m_output.empty())
+    {
+        m_amfConfig->addDisplayView("None", "Raw", "Raw", NULL);
+        /* A config with a display color space must have a view transform.
+        Either need to remove 'CIE-XYZ-D65' or add a view transform. */
+        m_amfConfig->addViewTransform(m_refConfig->getViewTransform("Un-tone-mapped"));
+        return;
+    }
+
     for (auto& elem : m_output.m_tldElements)
     {
         if (0 == Platform::Strcasecmp(elem.first.c_str(), AMF_TAG_TRANSFORMID))
@@ -873,7 +908,9 @@ void AMFParser::Impl::processLookTransforms()
     auto index = 1;
     for (auto it = m_look.begin(); it != m_look.end(); it++)
     {
-        if (processLookTransform(**it, index))
+        if (processLookTransform(**it, index, (m_numLooksBeforeWorkingLocation < 0 ?
+                                                AMF_NO_WORKING_LOCATION :
+                                                (index <= m_numLooksBeforeWorkingLocation ? AMF_PRE_WORKING_LOCATION : AMF_POST_WORKING_LOCATION))))
 			m_amfInfoObject->numLooksApplied++;
         index++;
     }
@@ -884,7 +921,7 @@ void AMFParser::Impl::processLookTransforms()
     for (auto index = 0; index < numLooks; index++)
     {
         std::string lookName = m_amfConfig->getLookNameByIndex(index);
-        if ((lookName.find("(Applied)") != std::string::npos) || (0 == Platform::Strcasecmp(lookName.c_str(), ACES_LOOK_NAME)))
+        if ((lookName.find("Applied)") != std::string::npos) || (0 == Platform::Strcasecmp(lookName.c_str(), ACES_LOOK_NAME)))
         {
         }
         else
@@ -937,9 +974,6 @@ void AMFParser::Impl::processClipId()
         std::string name = m_xmlFilePath.substr(m_xmlFilePath.find_last_of("/") + 1);
         m_clipName = name.substr(0, name.find_last_of("."));
     }
-
-    if (m_clipName.empty())
-        m_clipName = "AMF Clip Name";
 }
 
 void AMFParser::Impl::loadACESRefConfig(const char* configFilePath)
@@ -973,6 +1007,8 @@ void AMFParser::Impl::initAMFConfig()
     m_amfConfig->addColorSpace(m_refConfig->getColorSpace("ACEScct"));
     m_amfConfig->addColorSpace(m_refConfig->getColorSpace("CIE-XYZ-D65"));
     m_amfConfig->addColorSpace(m_refConfig->getColorSpace("Raw"));
+
+    m_amfConfig->setInactiveColorSpaces("CIE-XYZ-D65");
 
     m_amfConfig->setRole("scene_linear", "ACEScg");
     m_amfConfig->setRole("aces_interchange", ACES);
@@ -1071,16 +1107,26 @@ ConstViewTransformRcPtr AMFParser::Impl::searchViewTransforms(std::string acesId
     return NULL;
 }
 
-bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
+bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index, std::string workingLocation)
 {
-    auto wasApplied = mustApply(look);
+    auto wasApplied = !mustApply(look);
 
     std::string desc;
     getFileDescription(look, desc);
 
     std::string lookName = "AMF Look " + std::to_string(index);
-    if (wasApplied)
-        lookName += " (Applied)";
+    if (workingLocation.empty())
+    {
+        if (wasApplied)
+            lookName += " (Applied)";
+    }
+    else
+    {
+        if (wasApplied)
+            lookName += " (" + workingLocation + " and Applied)";
+        else
+            lookName += " (" + workingLocation + ")";
+    }
     lookName += " -- " + m_clipName;
 
     for (auto it = look.m_subElements.begin(); it != look.m_subElements.end(); it++)
@@ -1091,7 +1137,6 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
             if (lk != NULL)
             {
                 lk->setName(lookName.c_str());
-                lk->setDescription(desc.c_str());
                 m_amfConfig->addLook(lk);
                 return wasApplied;
             }
@@ -1265,7 +1310,7 @@ bool AMFParser::Impl::processLookTransform(AMFTransform& look, int index)
         lk->setName(lookName.c_str());
         lk->setProcessSpace(ACES);
         lk->setTransform(gt);
-        lk->setDescription(std::string("ASC CDL -- " + desc).c_str());
+        lk->setDescription("ASC CDL");
         m_amfConfig->addLook(lk);
         return wasApplied;
     }
@@ -1424,7 +1469,7 @@ void AMFParser::Impl::determineClipColorSpace()
 {
     bool mustApplyInput = mustApply(m_input);
     bool mustApplyOutput = mustApply(m_output);
-    if (!mustApplyOutput)
+    if (!m_output.empty() && !mustApplyOutput)
     {
         m_amfInfoObject->clipColorSpaceName = m_amfConfig->getDisplay(0);
         return;
@@ -1434,20 +1479,119 @@ void AMFParser::Impl::determineClipColorSpace()
         m_amfInfoObject->clipColorSpaceName = m_amfInfoObject->inputColorSpaceName;
         return;
     }
+    m_amfInfoObject->clipColorSpaceName = ACES;
+}
 
-    ConstColorSpaceRcPtr cs = searchColorSpaces(ACES);
-    if (cs != NULL)
+void AMFParser::Impl::handleWorkingLocation()
+{
+    if (m_numLooksBeforeWorkingLocation < 0)
+        return;
+
+    bool outputApplied = false;
+    bool outputExists = !m_output.empty();
+    if (outputExists)
+        outputApplied = !mustApply(m_output);
+
+    GroupTransformRcPtr gt_unapplied = GroupTransform::Create();
+
+    bool workingForward = true;
+    if (outputApplied)
+        workingForward = false;
+    else if (m_amfInfoObject->numLooksApplied < m_numLooksBeforeWorkingLocation)
+        workingForward = true;
+    else if (m_amfInfoObject->numLooksApplied > m_numLooksBeforeWorkingLocation)
+        workingForward = false;
+    else if (m_amfInfoObject->numLooksApplied == m_numLooksBeforeWorkingLocation)
+        workingForward = true;
+    if (workingForward)
     {
-        m_amfConfig->addColorSpace(cs);
-        m_amfInfoObject->clipColorSpaceName = m_amfInfoObject->inputColorSpaceName = m_amfConfig->getColorSpace(cs->getName())->getName();
-
-        auto it = CAMERA_MAPPING.find(cs->getName());
-        if (it != CAMERA_MAPPING.end())
+        if (mustApply(m_input))
         {
-            ConstColorSpaceRcPtr lin_cs = m_refConfig->getColorSpace(it->second.c_str());
-            m_amfConfig->addColorSpace(lin_cs);
+            ColorSpaceTransformRcPtr cst = ColorSpaceTransform::Create();
+            cst->setSrc(m_amfInfoObject->inputColorSpaceName);
+            cst->setDst(ACES);
+            cst->setDirection(TRANSFORM_DIR_FORWARD);
+            cst->setDataBypass(true);
+            gt_unapplied->appendTransform(cst);
+        }
+
+        auto i = 1, numLooks = m_amfConfig->getNumLooks();
+        for (auto index = 0; index < numLooks; index++)
+        {
+            std::string lookName = m_amfConfig->getLookNameByIndex(index);
+            if (lookName.find("Applied)") != std::string::npos)
+                i++;
+            else if (0 == Platform::Strcasecmp(lookName.c_str(), ACES_LOOK_NAME))
+                continue;
+            else if (i <= m_numLooksBeforeWorkingLocation)
+            {
+                LookTransformRcPtr lkt = LookTransform::Create();
+                lkt->setSrc(ACES);
+                lkt->setDst(ACES);
+                lkt->setLooks(lookName.c_str());
+                lkt->setSkipColorSpaceConversion(false);
+                lkt->setDirection(TRANSFORM_DIR_FORWARD);
+                gt_unapplied->appendTransform(lkt);
+                i++;
+            }
+            else
+                i++;
         }
     }
+    else
+    {
+        if (outputExists && outputApplied)
+        {
+            DisplayViewTransformRcPtr dvt = DisplayViewTransform::Create();
+            dvt->setSrc(ACES);
+            dvt->setDisplay(m_amfConfig->getActiveDisplays());
+            dvt->setView(m_amfConfig->getActiveViews());
+            dvt->setDirection(TRANSFORM_DIR_INVERSE);
+            gt_unapplied->appendTransform(dvt);
+        }
+
+        auto i = 1, numLooks = m_amfConfig->getNumLooks();
+        for (auto index = numLooks - 1; index >= 0; index--)
+        {
+            std::string lookName = m_amfConfig->getLookNameByIndex(index);
+            if (lookName.find("Applied)") != std::string::npos)
+            {
+                if (i <= m_numLooksBeforeWorkingLocation)
+                {
+                    LookTransformRcPtr lkt = LookTransform::Create();
+                    lkt->setSrc(ACES);
+                    lkt->setDst(ACES);
+                    lkt->setLooks(lookName.c_str());
+                    lkt->setSkipColorSpaceConversion(false);
+                    lkt->setDirection(TRANSFORM_DIR_INVERSE);
+                    gt_unapplied->appendTransform(lkt);
+                }
+                i--;
+            }
+            else if (0 == Platform::Strcasecmp(lookName.c_str(), ACES_LOOK_NAME))
+                continue;
+            else
+                i--;
+        }
+    }
+
+    if (gt_unapplied->getNumTransforms() == 0)
+    {
+        MatrixTransformRcPtr mt = MatrixTransform::Create();
+        mt->Identity(NULL, NULL);
+        gt_unapplied->appendTransform(mt);
+    }
+
+    std::string name = "AMF Clip to Working Space Transform -- " + m_clipName;
+    std::string family = "AMF/" + m_clipName;
+    NamedTransformRcPtr nt = NamedTransform::Create();
+    nt->setName(name.c_str());
+    nt->clearAliases();
+    nt->setFamily(family.c_str());
+    nt->setDescription("");
+    nt->setTransform(gt_unapplied, TRANSFORM_DIR_FORWARD);
+    nt->clearCategories();
+    m_amfConfig->addNamedTransform(nt);
 }
 
 void AMFParser::Impl::throwMessage(const std::string& error) const
