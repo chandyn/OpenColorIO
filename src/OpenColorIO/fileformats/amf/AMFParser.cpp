@@ -978,12 +978,21 @@ void AMFParser::Impl::processClipId()
 
 void AMFParser::Impl::loadACESRefConfig(const char* configFilePath)
 {
-    //TODO: need to find a way to remove the hard coding for 2.3 and 2.4 as this is not future proof
     std::string ver = GetVersion();
-    if (ver.find("2.3") != std::string::npos || ver.find("2.4") != std::string::npos)
+    if (ver.find("2.") == 0)
     {
-        m_refConfig = configFilePath == NULL ? Config::CreateFromBuiltinConfig("studio-config-v2.1.0_aces-v1.3_ocio-v2.3") : Config::CreateFromFile(configFilePath);
-        return;
+        // Extract the number after "2."
+        size_t pos = ver.find('.', 2);
+        if (pos != std::string::npos)
+        {
+            std::string minorVersionStr = ver.substr(2, pos - 2);
+            int minorVersion = std::stoi(minorVersionStr);
+            if (minorVersion >= 3)
+            {
+                m_refConfig = configFilePath == NULL ? Config::CreateFromBuiltinConfig("studio-config-v2.1.0_aces-v1.3_ocio-v2.3") : Config::CreateFromFile(configFilePath);
+                return;
+            }
+        }
     }
     throwMessage("Requires OCIO library version 2.3.0 or higher.");
 }
